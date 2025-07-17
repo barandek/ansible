@@ -1,0 +1,77 @@
+
+---
+- name: Comprehensive Docker repository cleanup (Debian/Ubuntu)
+  block:
+    - name: Check for Docker repository conflicts
+      shell: |
+        # Check all possible locations for Docker repositories
+        find /etc/apt -name "*.list" -o -name "*.sources" | xargs grep -l "download.docker.com" 2>/dev/null || echo "none"
+      register: docker_repo_files
+      changed_when: false
+      when: ansible_os_family == "Debian"
+
+    - name: Remove all Docker repository references
+      shell: |
+        # Remove all Docker repository files
+        find /etc/apt -name "*.list" -o -name "*.sources" | xargs grep -l "download.docker.com" 2>/dev/null | xargs rm -f
+        
+        # Remove Docker entries from main sources.list and sources.list.d files
+        find /etc/apt -name "sources.list*" | xargs sed -i '/download\.docker\.com/d' 2>/dev/null || true
+        
+        # Remove all Docker GPG keys
+        rm -f /etc/apt/keyrings/docker*
+        rm -f /usr/share/keyrings/docker*
+        rm -f /etc/apt/trusted.gpg.d/docker*
+        
+        # Clean apt cache completely
+        apt-get clean
+        rm -rf /var/lib/apt/lists/*
+        
+        # Force apt to rebuild its cache
+        apt-get update -o Dir::Etc::sourcelist="sources.list.d/000-temp-empty.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
+        rm -f /etc/apt/sources.list.d/000-temp-empty.list
+      when: 
+        - ansible_os_family == "Debian"
+        - docker_repo_files.stdout != "none"
+      ignore_errors: yes
+
+  when: ansible_os_family == "Debian"
+
+- name: Update package cache (Debian/Ubuntu)
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Update package cache (Fedora)
+  dnf:
+    update_cache: yes
+  when: ansible_distribution == "Fedora"
+
+- name: Install essential packages
+  include_tasks: "{{ ansible_os_family | lower }}.yml"
+
+- name: Set timezone to UTC
+  timezone:
+    name: UTC
+
+- name: Configure kernel parameters for security
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { name: "net.ipv4.ip_forward", value: "0" }
+    - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
+    - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.all.secure_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.secure_redirects", value: "0" }
+    - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    - { name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
+    - { name: "net.ipv4.conf.all.log_martians", value: "1" }
+    - { name: "net.ipv4.conf.default.log_martians", value: "1" }
+    - { name: "kernel.dmesg_restrict", value: "1" }
+    - { name: "kernel.kptr_restrict", value: "2" }

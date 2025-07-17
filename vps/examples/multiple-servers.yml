@@ -1,0 +1,40 @@
+
+---
+# =============================================================================
+# MULTIPLE SERVERS EXAMPLE
+# =============================================================================
+# When you need to configure multiple servers with different settings
+
+# Default settings (will be overridden per host if needed)
+ssh_port: 22
+fail2ban_bantime: 3600
+fail2ban_maxretry: 3
+min_cpu_cores: 2
+min_memory_gb: 2
+
+# Common SSH key for all servers
+custom_user_ssh_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+# Common allowed IPs
+allowed_ssh_ips:
+  - "203.0.113.100/32"
+  - "198.51.100.50/32"
+
+# =============================================================================
+# HOST-SPECIFIC OVERRIDES
+# =============================================================================
+# Create host_vars/hostname.yml files for server-specific settings
+
+# Example: host_vars/web-server-1.yml
+# target_host: "203.0.113.10"
+# initial_user: "ubuntu"
+# ssh_private_key_path: "~/.ssh/web-server.pem"
+# custom_user: "webdeploy"
+
+# Example: host_vars/db-server-1.yml
+# target_host: "203.0.113.20"
+# initial_user: "ubuntu"
+# ssh_private_key_path: "~/.ssh/db-server.pem"
+# custom_user: "dbdeploy"
+# min_cpu_cores: 4
+# min_memory_gb: 8

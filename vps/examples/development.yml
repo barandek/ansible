@@ -1,0 +1,59 @@
+
+---
+# =============================================================================
+# COOLIFY WITH CUSTOM PORTS EXAMPLE
+# =============================================================================
+# Use this when you need additional ports for your applications
+
+# Server connection
+target_host: "203.0.113.10"
+initial_user: "root"
+initial_auth_method: "ssh_key"
+ssh_private_key_path: "~/.ssh/id_rsa"
+
+# Custom user configuration
+custom_user: "deploy"
+custom_user_ssh_key_dir: "~/.ssh"
+custom_user_ssh_key_name: "coolify_custom_key"
+
+# Firewall configuration
+enable_coolify_ports: true     # Enable custom Coolify ports
+enable_custom_firewall: false  # Disable GitHub webhook restrictions
+
+# Custom Coolify ports with additional application ports
+coolify_ports:
+  # Standard Coolify ports
+  - { port: 8000, proto: tcp, comment: "Coolify dashboard HTTP" }
+  - { port: 6001, proto: tcp, comment: "Real-time communications" }
+  - { port: 6002, proto: tcp, comment: "Terminal access" }
+  - { port: 80, proto: tcp, comment: "HTTP/SSL certificate generation" }
+  - { port: 443, proto: tcp, comment: "HTTPS traffic" }
+  
+  # Additional application ports
+  - { port: 3000, proto: tcp, comment: "Node.js application" }
+  - { port: 3001, proto: tcp, comment: "React development server" }
+  - { port: 5432, proto: tcp, comment: "PostgreSQL database" }
+  - { port: 6379, proto: tcp, comment: "Redis cache" }
+  - { port: 9000, proto: tcp, comment: "Custom API service" }
+
+# SSH configuration
+ssh_port: 22
+fail2ban_bantime: 3600
+fail2ban_maxretry: 3
+
+# Access control
+allowed_ssh_ips:
+  - "203.0.113.100/32"        # Your IP address
+
+# System requirements (higher for multiple services)
+min_cpu_cores: 4
+min_memory_gb: 4
+
+# =============================================================================
+# USAGE INSTRUCTIONS
+# =============================================================================
+# 1. Copy this file to group_vars/all.yml
+# 2. Customize the coolify_ports section for your needs
+# 3. Update target_host and allowed_ssh_ips
+# 4. Run: ansible-playbook site.yml
+# 5. Your applications will be accessible on the configured ports

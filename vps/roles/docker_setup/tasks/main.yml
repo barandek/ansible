@@ -1,0 +1,42 @@
+
+---
+- name: Install Docker (Debian/Ubuntu)
+  include_tasks: docker_debian.yml
+  when: ansible_os_family == "Debian"
+
+- name: Ensure Docker service is started and enabled
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Ensure containerd service is started and enabled
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+  ignore_errors: yes
+
+- name: Verify Docker installation
+  command: docker --version
+  register: docker_version_check
+  failed_when: docker_version_check.rc != 0
+  changed_when: false
+
+- name: Install Docker Compose using system package manager
+  include_tasks: docker_compose.yml
+
+- name: Install ufw-docker script (Debian/Ubuntu)
+  get_url:
+    url: https://raw.githubusercontent.com/chaifeng/ufw-docker/master/ufw-docker
+    dest: /usr/local/bin/ufw-docker
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+  ignore_errors: yes
+
+- name: Display Docker installation status
+  debug:
+    msg:
+      - "✅ Docker installation completed"
+      - "Version: {{ docker_version_check.stdout }}"
+      - "Service status: Started and enabled"

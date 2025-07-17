@@ -1,0 +1,57 @@
+
+all:
+  hosts:
+    # Just list your hostnames - all config comes from vault_hosts
+    vps-server: {}
+    db-primary: {}
+    app-server: {}
+    webserver01: {}
+    # Add new hosts here as needed
+
+  vars:
+    # Common settings
+    ansible_python_interpreter: auto_silent
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    
+    # Dynamic configuration lookup from vault
+    _host_config: "{{ vault_hosts[inventory_hostname] }}"
+    
+    # Apply vault configuration dynamically
+    ansible_host: "{{ _host_config.ansible_host }}"
+    ansible_user: "{{ _host_config.ansible_user }}"
+    ansible_ssh_private_key_file: "{{ _host_config.ansible_ssh_private_key_file | default(omit) }}"
+    ansible_ssh_pass: "{{ _host_config.ansible_password | default(omit) }}"
+    server_role: "{{ _host_config.server_role }}"
+    environment: "{{ _host_config.environment }}"
+    auth_method: "{{ _host_config.auth_method }}"
+
+  # Static groups (you can also make these dynamic if needed)
+  children:
+    vps:
+      hosts:
+        vps-server: {}
+        # Add other webserver hostnames here
+    databases:
+      hosts:
+        db-primary: {}
+        # Add other database hostnames here
+    applications:
+      hosts:
+        app-server: {}
+        # Add other application hostnames here
+    coolify:
+      hosts:
+        vps-server: {}
+        # Add other coolify hostnames here
+        
+    # Environment groups
+    production:
+      hosts:
+        webserver01: {}
+        db-primary: {}
+    staging:
+      hosts:
+        app-server: {}
+    development:
+      hosts:
+        vps-server: {}

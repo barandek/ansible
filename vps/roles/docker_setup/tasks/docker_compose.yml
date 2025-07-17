@@ -1,0 +1,64 @@
+
+---
+- name: Check if Docker Compose plugin is available (Debian/Ubuntu)
+  command: docker compose version
+  register: docker_compose_plugin_check
+  failed_when: false
+  changed_when: false
+  when: ansible_os_family == "Debian"
+
+- name: Install Docker Compose via system package (Debian/Ubuntu) - if plugin not available
+  apt:
+    name: docker-compose
+    state: present
+    update_cache: yes
+  when: 
+    - ansible_os_family == "Debian"
+    - docker_compose_plugin_check.rc != 0
+
+- name: Install Docker Compose via pip with break-system-packages (fallback)
+  pip:
+    name: docker-compose
+    state: present
+    break_system_packages: yes
+  when: 
+    - ansible_os_family == "Debian"
+    - docker_compose_plugin_check.rc != 0
+  ignore_errors: yes
+
+- name: Download Docker Compose binary (final fallback)
+  get_url:
+    url: "https://github.com/docker/compose/releases/latest/download/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+    dest: /usr/local/bin/docker-compose
+    mode: '0755'
+  when: 
+    - ansible_os_family == "Debian"
+    - docker_compose_plugin_check.rc != 0
+  ignore_errors: yes
+
+- name: Create docker-compose symlink if needed
+  file:
+    src: /usr/local/bin/docker-compose
+    dest: /usr/bin/docker-compose
+    state: link
+  when: 
+    - ansible_os_family == "Debian"
+    - docker_compose_plugin_check.rc != 0
+  ignore_errors: yes
+
+- name: Verify Docker Compose installation
+  command: "{{ item }}"
+  register: compose_version_check
+  failed_when: false
+  changed_when: false
+  loop:
+    - "docker compose version"
+    - "docker-compose version"
+  ignore_errors: yes
+
+- name: Display Docker Compose installation status
+  debug:
+    msg:
+      - "Docker Compose installation status:"
+      - "  docker compose: {{ 'Available' if compose_version_check.results[0].rc == 0 else 'Not available' }}"
+      - "  docker-compose: {{ 'Available' if compose_version_check.results[1].rc == 0 else 'Not available' }}"

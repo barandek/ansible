@@ -1,0 +1,125 @@
+
+---
+- name: Create custom user
+  user:
+    name: "{{ custom_user }}"
+    shell: /bin/bash
+    create_home: yes
+    groups: docker,sudo
+    append: yes
+    password: "!"  # Disabled password
+
+- name: Create .ssh directory for custom user
+  file:
+    path: "/home/{{ custom_user }}/.ssh"
+    state: directory
+    owner: "{{ custom_user }}"
+    group: "{{ custom_user }}"
+    mode: '0700'
+
+- name: Add generated SSH public key for custom user
+  authorized_key:
+    user: "{{ custom_user }}"
+    key: "{{ custom_user_ssh_key }}"
+    state: present
+
+- name: Set correct permissions on authorized_keys file
+  file:
+    path: "/home/{{ custom_user }}/.ssh/authorized_keys"
+    owner: "{{ custom_user }}"
+    group: "{{ custom_user }}"
+    mode: '0600'
+
+- name: Add custom user to sudoers
+  lineinfile:
+    path: /etc/sudoers.d/{{ custom_user }}
+    line: "{{ custom_user }} ALL=(ALL) NOPASSWD:ALL"
+    create: yes
+    mode: '0440'
+    validate: 'visudo -cf %s'
+
+- name: Verify SSH key was added correctly
+  command: cat /home/{{ custom_user }}/.ssh/authorized_keys
+  register: authorized_keys_content
+  changed_when: false
+
+- name: Display authorized keys for verification
+  debug:
+    msg: 
+      - "SSH key added to authorized_keys:"
+      - "{{ authorized_keys_content.stdout }}"
+
+- name: Check local SSH key ownership before testing
+  become: no
+  stat:
+    path: "{{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }}"
+  register: local_ssh_key_stat
+  delegate_to: localhost
+
+- name: Fix SSH key ownership if needed
+  become: no
+  file:
+    path: "{{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }}"
+    owner: "{{ ansible_user_id }}"
+    mode: '0600'
+  delegate_to: localhost
+  when: local_ssh_key_stat.stat.pw_name == "root"
+  ignore_errors: yes
+
+- name: Fix SSH public key ownership if needed
+  become: no
+  file:
+    path: "{{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }}.pub"
+    owner: "{{ ansible_user_id }}"
+    mode: '0644'
+  delegate_to: localhost
+  when: local_ssh_key_stat.stat.pw_name == "root"
+  ignore_errors: yes
+
+- name: Test SSH key authentication for custom user (CRITICAL VERIFICATION)
+  become: no
+  command: ssh -i {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }} -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o PubkeyAuthentication=yes {{ custom_user }}@{{ ansible_host }} "echo 'SSH key authentication successful'"
+  register: ssh_test_result
+  ignore_errors: yes
+  delegate_to: localhost
+
+- name: Display SSH test result
+  debug:
+    msg:
+      - "=== SSH KEY VERIFICATION ==="
+      - "SSH test result: {{ 'SUCCESS' if ssh_test_result.rc == 0 else 'FAILED' }}"
+      - "{{ ssh_test_result.stdout if ssh_test_result.rc == 0 else 'Error: ' + ssh_test_result.stderr }}"
+      - ""
+      - "{{ '✅ SSH key authentication is working correctly' if ssh_test_result.rc == 0 else '❌ SSH key authentication failed - root access will be preserved for safety' }}"
+
+- name: Set SSH verification flag for security hardening
+  set_fact:
+    ssh_key_verified: "{{ ssh_test_result.rc == 0 }}"
+
+- name: Provide troubleshooting information if SSH test fails
+  debug:
+    msg:
+      - "🔧 SSH key authentication test failed. Troubleshooting steps:"
+      - ""
+      - "1. Fix SSH key ownership (if needed):"
+      - "   ./scripts/fix-ssh-key-ownership.sh"
+      - ""
+      - "2. Test SSH key manually:"
+      - "   ./scripts/test-ssh-key.sh"
+      - ""
+      - "3. Manual SSH test command:"
+      - "   ssh -i {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}"
+      - ""
+      - "4. Check SSH key permissions:"
+      - "   ls -la {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }}*"
+      - ""
+      - "⚠️ For safety, root access will remain enabled until SSH key authentication works"
+  when: ssh_test_result.rc != 0
+
+- name: Display user creation success
+  debug:
+    msg:
+      - "✅ User '{{ custom_user }}' created successfully"
+      - "{{ '✅ SSH key authentication verified' if ssh_test_result.rc == 0 else '⚠️ SSH key authentication needs attention' }}"
+      - "✅ Sudo access configured"
+      - "{{ '✅ Ready to proceed with SSH hardening and root access disabling' if ssh_test_result.rc == 0 else '⚠️ Root access will be preserved until SSH issues are resolved' }}"

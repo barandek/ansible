@@ -1,0 +1,39 @@
+
+---
+# =============================================================================
+# SSH KEY AUTHENTICATION EXAMPLE
+# =============================================================================
+# Use this when you already have SSH key access to your server
+
+# Server connection
+target_host: "203.0.113.10"
+initial_user: "root"
+initial_auth_method: "ssh_key"
+ssh_private_key_path: "~/.ssh/id_rsa"
+
+# Custom user configuration
+custom_user: "deploy"
+custom_user_ssh_key_dir: "~/.ssh"
+custom_user_ssh_key_name: "{{ custom_user }}_key"
+
+# Security settings
+ssh_port: 22
+fail2ban_bantime: 3600
+fail2ban_maxretry: 3
+
+# Access control
+allowed_ssh_ips:
+  - "203.0.113.100/32"        # Your IP
+
+# System requirements
+min_cpu_cores: 2
+min_memory_gb: 2
+
+# =============================================================================
+# USAGE INSTRUCTIONS
+# =============================================================================
+# 1. Copy this file to group_vars/all.yml
+# 2. Update target_host, ssh_private_key_path, and allowed_ssh_ips
+# 3. Run: ansible-playbook site.yml
+# 4. After completion, use the generated SSH key to connect:
+#    ssh -i ~/.ssh/deploy_key deploy@203.0.113.10

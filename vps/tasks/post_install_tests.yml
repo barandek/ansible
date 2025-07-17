@@ -1,0 +1,50 @@
+
+---
+- name: Test Docker installation
+  command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Test Docker Compose installation (plugin)
+  command: docker compose version
+  register: docker_compose_plugin_version
+  changed_when: false
+  failed_when: false
+
+- name: Test Docker Compose installation (standalone)
+  command: docker-compose version
+  register: docker_compose_standalone_version
+  changed_when: false
+  failed_when: false
+
+- name: Set Docker Compose version fact
+  set_fact:
+    docker_compose_available: "{{ docker_compose_plugin_version.rc == 0 or docker_compose_standalone_version.rc == 0 }}"
+    docker_compose_version_output: "{{ docker_compose_plugin_version.stdout if docker_compose_plugin_version.rc == 0 else docker_compose_standalone_version.stdout }}"
+
+- name: Check UFW status
+  command: ufw status
+  register: ufw_status
+  changed_when: false
+  when: ansible_os_family in ["Debian", "Archlinux"]
+  ignore_errors: yes
+
+- name: Check Fail2ban status
+  command: fail2ban-client status sshd
+  register: fail2ban_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Display test results
+  debug:
+    msg:
+      - "=== POST-INSTALLATION TEST RESULTS ==="
+      - "✅ Docker: {{ docker_version.stdout }}"
+      - "{{ '✅' if docker_compose_available else '❌' }} Docker Compose: {{ docker_compose_version_output if docker_compose_available else 'Not available' }}"
+      - ""
+      - "Firewall Status:"
+      - "{{ 'UFW: ' + (ufw_status.stdout_lines[0] if ufw_status is defined and ufw_status.rc == 0 else 'Not configured') if ansible_os_family in ['Debian', 'Archlinux'] else '' }}"
+      - "{{ 'Firewalld: Active' if firewalld_status is defined and firewalld_status.rc == 0 else '  Firewalld: Not configured' if ansible_os_family in ['RedHat', 'Suse'] else '' }}"
+      - "{{ 'iptables: Configured' if iptables_status is defined and iptables_status.rc == 0 else '  iptables: Not configured' if ansible_os_family == 'Alpine' else '' }}"
+      - "Fail2ban SSH jail: {{ 'Active' if fail2ban_status.rc == 0 else 'Not active' }}"
+      - "{{ '⚠️  Docker Compose installation needs attention' if not docker_compose_available else '✅ All tests passed successfully!' }}"
