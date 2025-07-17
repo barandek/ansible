@@ -1,0 +1,290 @@
+
+---
+- name: Server Setup with Docker, SSH Hardening, and User Management
+  hosts: all
+  become: yes
+  vars:
+    # User configuration
+    app_user: "appuser"
+    app_user_groups: ["docker", "sudo"]
+    
+    # SSH hardening configuration
+    ssh_port: 22
+    allowed_users: ["{{ app_user }}", "ubuntu", "root"]
+    max_auth_tries: 3
+    client_alive_interval: 300
+    client_alive_count_max: 2
+    
+  tasks:
+    # System updates
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+
+    # Create application user
+    - name: Create application user
+      user:
+        name: "{{ app_user }}"
+        groups: "{{ app_user_groups }}"
+        shell: /bin/bash
+        create_home: yes
+        append: yes
+        state: present
+
+    - name: Set up SSH directory for app user
+      file:
+        path: "/home/{{ app_user }}/.ssh"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0700'
+
+    - name: Add authorized keys for app user (if provided)
+      authorized_key:
+        user: "{{ app_user }}"
+        key: "{{ item }}"
+        state: present
+      loop: "{{ ssh_public_keys | default([]) }}"
+      when: ssh_public_keys is defined
+
+    # Install Docker
+    - name: Install required packages for Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add users to docker group
+      user:
+        name: "{{ item }}"
+        groups: docker
+        append: yes
+      loop:
+        - "{{ app_user }}"
+        - "{{ ansible_user | default('ubuntu') }}"
+
+    # Install Docker Compose (standalone)
+    - name: Get latest Docker Compose version
+      uri:
+        url: https://api.github.com/repos/docker/compose/releases/latest
+        return_content: yes
+      register: docker_compose_latest
+
+    - name: Download Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/{{ docker_compose_latest.json.tag_name }}/docker-compose-linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create docker-compose symlink
+      file:
+        src: /usr/local/bin/docker-compose
+        dest: /usr/bin/docker-compose
+        state: link
+
+    # SSH Hardening
+    - name: Backup original SSH config
+      copy:
+        src: /etc/ssh/sshd_config
+        dest: /etc/ssh/sshd_config.backup
+        remote_src: yes
+        backup: yes
+
+    - name: Configure SSH hardening
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: '^#?Port', line: 'Port {{ ssh_port }}' }
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication yes' }
+        - { regexp: '^#?AuthorizedKeysFile', line: 'AuthorizedKeysFile .ssh/authorized_keys' }
+        - { regexp: '^#?PermitEmptyPasswords', line: 'PermitEmptyPasswords no' }
+        - { regexp: '^#?ChallengeResponseAuthentication', line: 'ChallengeResponseAuthentication no' }
+        - { regexp: '^#?UsePAM', line: 'UsePAM yes' }
+        - { regexp: '^#?X11Forwarding', line: 'X11Forwarding no' }
+        - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries {{ max_auth_tries }}' }
+        - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval {{ client_alive_interval }}' }
+        - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax {{ client_alive_count_max }}' }
+        - { regexp: '^#?Protocol', line: 'Protocol 2' }
+        - { regexp: '^#?LogLevel', line: 'LogLevel VERBOSE' }
+        - { regexp: '^#?MaxStartups', line: 'MaxStartups 10:30:60' }
+        - { regexp: '^#?LoginGraceTime', line: 'LoginGraceTime 30' }
+        - { regexp: '^#?StrictModes', line: 'StrictModes yes' }
+        - { regexp: '^#?IgnoreRhosts', line: 'IgnoreRhosts yes' }
+        - { regexp: '^#?HostbasedAuthentication', line: 'HostbasedAuthentication no' }
+      notify: restart ssh
+
+    - name: Configure allowed users
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?AllowUsers'
+        line: "AllowUsers {{ allowed_users | join(' ') }}"
+        backup: yes
+      notify: restart ssh
+
+    - name: Configure SSH ciphers (strong encryption)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?Ciphers'
+        line: 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
+        backup: yes
+      notify: restart ssh
+
+    - name: Configure SSH MACs (strong message authentication)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?MACs'
+        line: 'MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha2-512'
+        backup: yes
+      notify: restart ssh
+
+    - name: Configure SSH key exchange algorithms
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?KexAlgorithms'
+        line: 'KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256'
+        backup: yes
+      notify: restart ssh
+
+    # Firewall configuration
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Reset UFW to defaults
+      ufw:
+        state: reset
+
+    - name: Configure UFW defaults
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+
+    - name: Allow SSH through firewall
+      ufw:
+        rule: allow
+        port: "{{ ssh_port }}"
+        proto: tcp
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+    # Additional security measures
+    - name: Install fail2ban
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: Configure fail2ban for SSH
+      copy:
+        content: |
+          [sshd]
+          enabled = true
+          port = {{ ssh_port }}
+          filter = sshd
+          logpath = /var/log/auth.log
+          maxretry = 3
+          bantime = 3600
+          findtime = 600
+        dest: /etc/fail2ban/jail.local
+        backup: yes
+      notify: restart fail2ban
+
+    - name: Start and enable fail2ban
+      systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+
+    # System hardening
+    - name: Disable unused network protocols
+      lineinfile:
+        path: /etc/modprobe.d/blacklist-rare-network.conf
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - "install dccp /bin/true"
+        - "install sctp /bin/true"
+        - "install rds /bin/true"
+        - "install tipc /bin/true"
+
+    - name: Set kernel parameters for security
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.ipv4.ip_forward', value: '0' }
+        - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.log_martians', value: '1' }
+        - { name: 'net.ipv4.conf.default.log_martians', value: '1' }
+        - { name: 'net.ipv4.icmp_echo_ignore_broadcasts', value: '1' }
+        - { name: 'net.ipv4.icmp_ignore_bogus_error_responses', value: '1' }
+        - { name: 'net.ipv4.tcp_syncookies', value: '1' }
+
+  handlers:
+    - name: restart ssh
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: restart fail2ban
+      systemd:
+        name: fail2ban
+        state: restarted
