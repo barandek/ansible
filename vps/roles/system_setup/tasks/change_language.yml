@@ -1,5 +1,6 @@
 
 ---
+
 - name: Install locales package
   apt:
     name: locales
