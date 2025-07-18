@@ -12,44 +12,29 @@ fatal: [vps-server]: FAILED! => {"msg": "Using a SSH password instead of a key i
 
 **Solutions:**
 
-#### Option A: Use the provided script (Recommended)
-```bash
-chmod +x run-playbook.sh
-./run-playbook.sh
-```
-
-#### Option B: Install sshpass and run manually
+#### Option A: Install sshpass and run manually
 ```bash
 # Ubuntu/Debian
 sudo apt-get install sshpass
 
-# RHEL/CentOS
-sudo yum install sshpass
-
-# Fedora
-sudo dnf install sshpass
-
-# macOS
-brew install sshpass
-
 # Then run with password prompt
-ansible-playbook site.yml --ask-pass
+ansible-playbook -i inventory.yml site.yml --ask-pass --ask-vault-pass
 ```
 
-#### Option C: Add host to known_hosts first
+#### Option B: Add host to known_hosts first
 ```bash
 # Add the server to known_hosts
 ssh-keyscan -H YOUR_SERVER_IP >> ~/.ssh/known_hosts
 
 # Then run the playbook
-ansible-playbook site.yml
+ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 ```
 
-#### Option D: Use environment variables
+#### Option C: Use environment variables
 ```bash
 export ANSIBLE_HOST_KEY_CHECKING=False
 export ANSIBLE_SSH_ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-ansible-playbook site.yml --ask-pass
+ansible-playbook -i inventory.yml site.yml --ask-pass --ask-vault-pass
 ```
 
 ## Docker Installation Issues
@@ -68,8 +53,7 @@ This error occurs on newer Ubuntu/Debian systems. The playbook now handles this 
 
 1. **First trying Docker Compose plugin** (comes with Docker CE)
 2. **Then trying system package** (`apt install docker-compose`)
-3. **Then trying pip with break-system-packages** (if needed)
-4. **Finally downloading binary** (as last resort)
+3. **Finally downloading binary** (as last resort)
 
 **Manual fix if needed:**
 ```bash
@@ -79,10 +63,7 @@ docker compose version
 # Option 2: Install via system package
 sudo apt install docker-compose
 
-# Option 3: Use pip with break-system-packages
-pip install docker-compose --break-system-packages
-
-# Option 4: Download binary directly
+# Option 3: Download binary directly
 sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
 ```
@@ -171,7 +152,7 @@ UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh
 
 **Solutions:**
 - Check if the server is running and accessible
-- Verify the IP address in `group_vars/all.yml`
+- Verify the IP address in `group_vars/vault.yml`
 - Check if SSH port is correct (default: 22)
 - Ensure firewall allows SSH connections
 
@@ -183,51 +164,62 @@ UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh
 ```
 
 **Solutions:**
-- Verify the username in `initial_user` (usually 'root' or 'ubuntu')
-- Check if the SSH key path is correct
+- Verify the username in vault.yml (usually 'root' for initial setup)
+- Check if the SSH key path is correct in vault configuration
 - Ensure the password is correct (if using password auth)
 - Try connecting manually first: `ssh root@YOUR_SERVER_IP`
 
 ## Configuration Issues
 
-### 1. Missing Configuration Files
+### 1. Vault Configuration Issues
 
 **Error:**
 ```
-❌ Configuration file group_vars/all.yml not found!
+ERROR! Attempting to decrypt but no vault secrets found
 ```
 
 **Solution:**
 ```bash
-cp group_vars/all.yml.example group_vars/all.yml
-nano group_vars/all.yml
+# Create vault file if missing
+ansible-vault create group_vars/vault.yml
+
+# Edit existing vault
+ansible-vault edit group_vars/vault.yml
 ```
 
-### 2. Invalid Authentication Method
+### 2. Host Not Found in Vault
 
 **Error:**
 ```
-❌ Invalid authentication method: 
+Environment variable shows empty or MISSING_HOST
 ```
 
 **Solution:**
-Edit `group_vars/all.yml` and set:
+Ensure your vault.yml contains the correct host key:
 ```yaml
-initial_auth_method: "ssh_key"  # or "password"
+vault_hosts:
+  your-hostname:  # Must match inventory.yml hostname
+    ansible_host: "192.168.1.100"
+    ansible_user: "root"
+    auth_method: "password"
+    server_role: "coolify"
+    environment: "production"
 ```
 
 ### 3. SSH Key Not Found
 
 **Error:**
 ```
-❌ SSH private key not found at: ~/.ssh/id_rsa
+SSH private key not found at specified path
 ```
 
 **Solutions:**
 - Generate a new SSH key: `ssh-keygen -t rsa -b 4096`
-- Update the path in `group_vars/all.yml`:
+- Update the path in vault.yml:
   ```yaml
-  ssh_private_key_path: "/path/to/your/key"
+  vault_hosts:
+    your-hostname:
+      ansible_ssh_private_key_file: "/path/to/your/key"
   ```
 
 ## Firewall Issues
@@ -237,14 +229,13 @@ initial_auth_method: "ssh_key"  # or "password"
 **Problem:** Cannot access Coolify dashboard or other services
 
 **Solutions:**
-- Check if Coolify ports are enabled:
+- Check if Coolify ports are enabled in group_vars/all.yml:
   ```yaml
   enable_coolify_ports: true
   ```
 - Verify firewall status on server:
   ```bash
-  sudo ufw status  # Ubuntu/Debian
-  sudo firewall-cmd --list-all  # RHEL/CentOS
+  sudo ufw status verbose
   ```
 - Test port connectivity:
   ```bash
@@ -256,7 +247,7 @@ initial_auth_method: "ssh_key"  # or "password"
 **Problem:** Cannot SSH to server after playbook runs
 
 **Solutions:**
-- Check `allowed_ssh_ips` configuration:
+- Check `allowed_ssh_ips` configuration in group_vars/all.yml:
   ```yaml
   allowed_ssh_ips: []  # Allow all IPs
   # or
@@ -266,7 +257,7 @@ initial_auth_method: "ssh_key"  # or "password"
 - Use console access to fix firewall rules
 - Connect using the generated SSH key:
   ```bash
-  ssh -i ~/.ssh/deploy_key deploy@YOUR_SERVER_IP
+  ssh -i ~/.ssh/hostname_username_key username@YOUR_SERVER_IP
   ```
 
 ## User Management Issues
@@ -280,10 +271,10 @@ deploy is not in the sudoers file
 
 **Solution:**
 ```bash
-# Check sudoers file
-sudo cat /etc/sudoers.d/deploy
+# Check sudoers file (replace 'username' with your custom_user)
+sudo cat /etc/sudoers.d/username
 
-# Should contain: deploy ALL=(ALL) NOPASSWD:ALL
+# Should contain: username ALL=(ALL) NOPASSWD:ALL
 ```
 
 ### 2. SSH Key Authentication Failed for New User
@@ -293,16 +284,16 @@ sudo cat /etc/sudoers.d/deploy
 **Solutions:**
 - Check key permissions:
   ```bash
-  ls -la ~/.ssh/deploy_key  # Should be 600
-  chmod 600 ~/.ssh/deploy_key
+  ls -la ~/.ssh/hostname_username_key  # Should be 600
+  chmod 600 ~/.ssh/hostname_username_key
   ```
 - Verify public key on server:
   ```bash
-  sudo cat /home/deploy/.ssh/authorized_keys
+  sudo cat /home/username/.ssh/authorized_keys
   ```
 - Test key manually:
   ```bash
-  ssh-keygen -l -f ~/.ssh/deploy_key
+  ssh-keygen -l -f ~/.ssh/hostname_username_key
   ```
 
 ## Package Manager Issues
@@ -317,12 +308,10 @@ No package matching 'docker-compose' found available, installed or updated
 **Solutions:**
 ```bash
 # Update package cache first
-sudo apt update  # Debian/Ubuntu
-sudo yum update  # RHEL/CentOS
+sudo apt update
 
 # Try alternative package names
-sudo apt install docker.io docker-compose  # Ubuntu
-sudo yum install docker docker-compose     # CentOS
+sudo apt install docker.io docker-compose
 ```
 
 ### 2. Repository Issues
@@ -384,10 +373,10 @@ pip install paramiko
 **Solution:**
 ```bash
 # Check YAML syntax
-ansible-inventory --list
+ansible-inventory -i inventory.yml --list
 
 # Validate inventory file
-ansible-playbook site.yml --syntax-check
+ansible-playbook -i inventory.yml site.yml --syntax-check
 ```
 
 ## Quick Fixes
@@ -395,12 +384,11 @@ ansible-playbook site.yml --syntax-check
 ### Reset and Start Over
 ```bash
 # If everything goes wrong, reset and try again
-rm -rf ~/.ssh/deploy_key*
-cp group_vars/all.yml.example group_vars/all.yml
-# Edit configuration
-nano group_vars/all.yml
+rm -rf ~/.ssh/hostname_username_key*
+# Edit vault configuration
+ansible-vault edit group_vars/vault.yml
 # Run again
-./run-playbook.sh
+ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 ```
 
 ### Manual SSH Test
@@ -409,19 +397,19 @@ nano group_vars/all.yml
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@YOUR_SERVER_IP
 
 # Test with generated key
-ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy@YOUR_SERVER_IP
+ssh -i ~/.ssh/hostname_username_key -o StrictHostKeyChecking=no username@YOUR_SERVER_IP
 ```
 
 ### Check Ansible Configuration
 ```bash
 # Verify Ansible can reach the host
-ansible all -m ping
+ansible -i inventory.yml all -m ping --ask-vault-pass
 
 # Check Ansible configuration
 ansible-config dump | grep -i ssh
 
 # Test with verbose output
-ansible-playbook site.yml -vvv
+ansible-playbook -i inventory.yml site.yml -vvv --ask-vault-pass
 ```
 
 ### Docker Compose Verification
@@ -442,10 +430,10 @@ If you're still having issues:
 
 1. **Check the logs:** Look at the full Ansible output for specific error messages
 2. **Test manually:** Try SSH connections and Docker commands manually before running the playbook
-3. **Verify configuration:** Double-check all settings in `group_vars/all.yml`
+3. **Verify configuration:** Double-check all settings in `group_vars/vault.yml` and `group_vars/all.yml`
 4. **Use verbose mode:** Run with `-vvv` for detailed output:
    ```bash
-   ansible-playbook site.yml -vvv
+   ansible-playbook -i inventory.yml site.yml -vvv --ask-vault-pass
    ```
 5. **Check system logs:** Look at system logs for more details:
    ```bash
@@ -461,16 +449,16 @@ If you're still having issues:
 ssh -o StrictHostKeyChecking=no root@YOUR_SERVER_IP
 
 # Run playbook with verbose output
-ansible-playbook site.yml -vvv
+ansible-playbook -i inventory.yml site.yml -vvv --ask-vault-pass
 
 # Run specific tags only
-ansible-playbook site.yml --tags users
+ansible-playbook -i inventory.yml site.yml --tags users --ask-vault-pass
 
 # Check syntax
-ansible-playbook site.yml --syntax-check
+ansible-playbook -i inventory.yml site.yml --syntax-check
 
 # Dry run
-ansible-playbook site.yml --check
+ansible-playbook -i inventory.yml site.yml --check --ask-vault-pass
 
 # Test Docker after installation
 docker --version
@@ -479,8 +467,6 @@ docker run hello-world
 
 # Check firewall status
 sudo ufw status verbose
-sudo firewall-cmd --list-all
-sudo iptables -L -n
 
 # Check services
 sudo systemctl status docker
@@ -499,8 +485,7 @@ sudo systemctl status ssh
    ```
 3. **Disable firewall temporarily:**
    ```bash
-   sudo ufw disable  # Ubuntu/Debian
-   sudo systemctl stop firewalld  # RHEL/CentOS
+   sudo ufw disable
    ```
 4. **Re-enable root password login temporarily:**
    ```bash

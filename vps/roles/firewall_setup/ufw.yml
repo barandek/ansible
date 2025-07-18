@@ -78,4 +78,5 @@
 
 - name: Show UFW configuration
   debug:
-    msg: "{{ ufw_status_output.stdout_lines }}"
+    msg: |
+      {{ ufw_status_output.stdout_lines | join('\n') }}

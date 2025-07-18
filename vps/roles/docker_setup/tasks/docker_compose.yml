@@ -7,26 +7,18 @@
   changed_when: false
   when: ansible_os_family == "Debian"
 
-- name: Install Docker Compose via system package (Debian/Ubuntu) - if plugin not available
+- name: Install Docker Compose via system package manager (Debian/Ubuntu)
   apt:
     name: docker-compose
     state: present
     update_cache: yes
-  when: 
-    - ansible_os_family == "Debian"
-    - docker_compose_plugin_check.rc != 0
-
-- name: Install Docker Compose via pip with break-system-packages (fallback)
-  pip:
-    name: docker-compose
-    state: present
-    break_system_packages: yes
+  register: apt_compose_install
   when: 
     - ansible_os_family == "Debian"
     - docker_compose_plugin_check.rc != 0
   ignore_errors: yes
 
-- name: Download Docker Compose binary (final fallback)
+- name: Download Docker Compose binary (fallback if apt failed)
   get_url:
     url: "https://github.com/docker/compose/releases/latest/download/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
     dest: /usr/local/bin/docker-compose
@@ -34,6 +26,7 @@
   when: 
     - ansible_os_family == "Debian"
     - docker_compose_plugin_check.rc != 0
+    - apt_compose_install is failed or apt_compose_install is skipped
   ignore_errors: yes
 
 - name: Create docker-compose symlink if needed
@@ -44,6 +37,7 @@
   when: 
     - ansible_os_family == "Debian"
     - docker_compose_plugin_check.rc != 0
+    - apt_compose_install is failed or apt_compose_install is skipped
   ignore_errors: yes
 
 - name: Verify Docker Compose installation
@@ -58,7 +52,8 @@
 
 - name: Display Docker Compose installation status
   debug:
-    msg:
-      - "Docker Compose installation status:"
-      - "  docker compose: {{ 'Available' if compose_version_check.results[0].rc == 0 else 'Not available' }}"
-      - "  docker-compose: {{ 'Available' if compose_version_check.results[1].rc == 0 else 'Not available' }}"
+    msg: |
+      Docker Compose installation status:
+      docker compose: {{ 'Available' if compose_version_check.results[0].rc == 0 else 'Not available' }}
+      docker-compose: {{ 'Available' if compose_version_check.results[1].rc == 0 else 'Not available' }}
+      Status: {{ 'Installation successful' if compose_version_check.results[0].rc == 0 or compose_version_check.results[1].rc == 0 else 'Installation needs attention' }}

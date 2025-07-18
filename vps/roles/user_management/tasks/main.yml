@@ -43,12 +43,6 @@
   register: authorized_keys_content
   changed_when: false
 
-- name: Display authorized keys for verification
-  debug:
-    msg: 
-      - "SSH key added to authorized_keys:"
-      - "{{ authorized_keys_content.stdout }}"
-
 - name: Check local SSH key ownership before testing
   become: no
   stat:
@@ -85,12 +79,11 @@
 
 - name: Display SSH test result
   debug:
-    msg:
-      - "=== SSH KEY VERIFICATION ==="
-      - "SSH test result: {{ 'SUCCESS' if ssh_test_result.rc == 0 else 'FAILED' }}"
-      - "{{ ssh_test_result.stdout if ssh_test_result.rc == 0 else 'Error: ' + ssh_test_result.stderr }}"
-      - ""
-      - "{{ '✅ SSH key authentication is working correctly' if ssh_test_result.rc == 0 else '❌ SSH key authentication failed - root access will be preserved for safety' }}"
+    msg: |
+      === SSH KEY VERIFICATION ===
+      SSH test result: {{ 'SUCCESS' if ssh_test_result.rc == 0 else 'FAILED' }}
+      {{ ssh_test_result.stdout if ssh_test_result.rc == 0 else 'Error: ' + ssh_test_result.stderr }}
+      {{ 'SSH key authentication is working correctly' if ssh_test_result.rc == 0 else 'SSH key authentication failed - root access will be preserved for safety' }}
 
 - name: Set SSH verification flag for security hardening
   set_fact:
@@ -98,28 +91,23 @@
 
 - name: Provide troubleshooting information if SSH test fails
   debug:
-    msg:
-      - "🔧 SSH key authentication test failed. Troubleshooting steps:"
-      - ""
-      - "1. Fix SSH key ownership (if needed):"
-      - "   ./scripts/fix-ssh-key-ownership.sh"
-      - ""
-      - "2. Test SSH key manually:"
-      - "   ./scripts/test-ssh-key.sh"
-      - ""
-      - "3. Manual SSH test command:"
-      - "   ssh -i {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}"
-      - ""
-      - "4. Check SSH key permissions:"
-      - "   ls -la {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }}*"
-      - ""
-      - "⚠️ For safety, root access will remain enabled until SSH key authentication works"
+    msg: |
+      SSH key authentication test failed. Troubleshooting steps:
+      1. Fix SSH key ownership (if needed):
+         ./scripts/fix-ssh-key-ownership.sh
+      2. Test SSH key manually:
+         ./scripts/test-ssh-key.sh
+      3. Manual SSH test command:
+         ssh -i {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}
+      4. Check SSH key permissions:
+         ls -la {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }}*
+      For safety, root access will remain enabled until SSH key authentication works
   when: ssh_test_result.rc != 0
 
 - name: Display user creation success
   debug:
-    msg:
-      - "✅ User '{{ custom_user }}' created successfully"
-      - "{{ '✅ SSH key authentication verified' if ssh_test_result.rc == 0 else '⚠️ SSH key authentication needs attention' }}"
-      - "✅ Sudo access configured"
-      - "{{ '✅ Ready to proceed with SSH hardening and root access disabling' if ssh_test_result.rc == 0 else '⚠️ Root access will be preserved until SSH issues are resolved' }}"
+    msg: |
+      User '{{ custom_user }}' created successfully
+      {{ 'SSH key authentication verified' if ssh_test_result.rc == 0 else 'SSH key authentication needs attention' }}
+      Sudo access configured
+      {{ 'Ready to proceed with SSH hardening and root access disabling' if ssh_test_result.rc == 0 else 'Root access will be preserved until SSH issues are resolved' }}

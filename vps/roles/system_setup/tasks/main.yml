@@ -43,11 +43,6 @@
     cache_valid_time: 3600
   when: ansible_os_family == "Debian"
 
-- name: Update package cache (Fedora)
-  dnf:
-    update_cache: yes
-  when: ansible_distribution == "Fedora"
-
 - name: Install essential packages
   include_tasks: "{{ ansible_os_family | lower }}.yml"
 

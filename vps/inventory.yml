@@ -1,57 +1,63 @@
 
 all:
   hosts:
-    # Just list your hostnames - all config comes from vault_hosts
     vps-server: {}
     db-primary: {}
     app-server: {}
-    webserver01: {}
-    # Add new hosts here as needed
 
   vars:
     # Common settings
     ansible_python_interpreter: auto_silent
     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     
-    # Dynamic configuration lookup from vault
-    _host_config: "{{ vault_hosts[inventory_hostname] }}"
+    # Default values for all hosts
+    _defaults:
+      ansible_user: root
+      ansible_password: SuperSecretPassword123
+      server_role: coolify
+      environment_name: development
+      auth_method: password
     
-    # Apply vault configuration dynamically
-    ansible_host: "{{ _host_config.ansible_host }}"
-    ansible_user: "{{ _host_config.ansible_user }}"
-    ansible_ssh_private_key_file: "{{ _host_config.ansible_ssh_private_key_file | default(omit) }}"
-    ansible_ssh_pass: "{{ _host_config.ansible_password | default(omit) }}"
-    server_role: "{{ _host_config.server_role }}"
-    environment: "{{ _host_config.environment }}"
-    auth_method: "{{ _host_config.auth_method }}"
+    # Dynamic configuration: automatically merge vault config with defaults
+    # This creates ALL variables from vault dynamically - no need to specify each one!
+    # If vault has a key, use vault value; if not, use default; if no default, skip it
+    _vault_config: "{{ vault_hosts[inventory_hostname] if vault_hosts is defined and inventory_hostname in vault_hosts else {} }}"
+    
+    # Merge defaults with vault config - vault values override defaults
+    _merged_vars: "{{ _defaults | combine(_vault_config, recursive=true) }}"
+    
+    # Dynamically expose all variables from the merged config
+    ansible_host: "{{ _merged_vars.ansible_host | default(omit) }}"
+    ansible_user: "{{ _merged_vars.ansible_user }}"
+    ansible_ssh_private_key_file: "{{ _merged_vars.ansible_ssh_private_key_file | default(omit) }}"
+    ansible_ssh_pass: "{{ _merged_vars.ansible_ssh_pass | default(omit) }}"
+    server_role: "{{ _merged_vars.server_role }}"
+    environment_name: "{{ _merged_vars.environment | default(_merged_vars.environment_name) }}"
+    auth_method: "{{ _merged_vars.auth_method }}"
 
-  # Static groups (you can also make these dynamic if needed)
   children:
     vps:
       hosts:
         vps-server: {}
-        # Add other webserver hostnames here
     databases:
       hosts:
         db-primary: {}
-        # Add other database hostnames here
     applications:
       hosts:
-        app-server: {}
-        # Add other application hostnames here
+        app-server-stg: {}
+        app-server-dev: {}
     coolify:
       hosts:
         vps-server: {}
-        # Add other coolify hostnames here
         
     # Environment groups
     production:
       hosts:
-        webserver01: {}
+        vps-server: {}
         db-primary: {}
     staging:
       hosts:
-        app-server: {}
+        app-server-stg: {}
     development:
       hosts:
-        vps-server: {}
+        app-server-dev: {}

@@ -1,0 +1,32 @@
+---
+# Quick debug playbook to test variable resolution
+- name: Debug Variable Resolution
+  hosts: all
+  gather_facts: no
+  vars_files:
+    - group_vars/vault.yml
+  
+  tasks:
+    - name: Debug vault_hosts structure
+      debug:
+        msg: |
+          === VAULT DEBUG ===
+          vault_hosts defined: {{ vault_hosts is defined }}
+          vault_hosts keys: {{ vault_hosts.keys() | list if vault_hosts is defined else 'UNDEFINED' }}
+          
+    - name: Debug current host vault data
+      debug:
+        msg: |
+          === HOST VAULT DATA ===
+          inventory_hostname: {{ inventory_hostname }}
+          vault_hosts.{{ inventory_hostname }}: {{ vault_hosts[inventory_hostname] if vault_hosts is defined and inventory_hostname in vault_hosts else 'NOT FOUND' }}
+          
+    - name: Debug resolved variables
+      debug:
+        msg: |
+          === RESOLVED VARIABLES ===
+          ansible_host: {{ ansible_host | default('UNDEFINED') }}
+          ansible_user: {{ ansible_user | default('UNDEFINED') }}
+          server_role: {{ server_role | default('UNDEFINED') }}
+          environment_name: {{ environment_name | default('UNDEFINED') }}
+          auth_method: {{ auth_method | default('UNDEFINED') }}

@@ -1,8 +1,28 @@
 
 ---
-- name: Install Docker (Debian/Ubuntu)
-  include_tasks: docker_debian.yml
-  when: ansible_os_family == "Debian"
+- name: Check if Docker is already properly installed
+  command: docker --version
+  register: docker_check
+  failed_when: false
+  changed_when: false
+
+- name: Check if Docker service is running
+  systemd:
+    name: docker
+  register: docker_service_check
+  failed_when: false
+
+- name: Set Docker installation status
+  set_fact:
+    docker_needs_installation: "{{ docker_check.rc != 0 or docker_service_check.status.ActiveState != 'active' }}"
+
+- name: Docker installation block
+  block:
+    - name: Install Docker (Debian/Ubuntu)
+      include_tasks: docker_debian.yml
+      when: ansible_os_family == "Debian"
+
+  when: docker_needs_installation
 
 - name: Ensure Docker service is started and enabled
   systemd:
@@ -26,7 +46,7 @@
 - name: Install Docker Compose using system package manager
   include_tasks: docker_compose.yml
 
-- name: Install ufw-docker script (Debian/Ubuntu)
+- name: Install ufw-docker script (Debian/Ubuntu/Arch only)
   get_url:
     url: https://raw.githubusercontent.com/chaifeng/ufw-docker/master/ufw-docker
     dest: /usr/local/bin/ufw-docker
@@ -36,7 +56,8 @@
 
 - name: Display Docker installation status
   debug:
-    msg:
-      - "✅ Docker installation completed"
-      - "Version: {{ docker_version_check.stdout }}"
-      - "Service status: Started and enabled"
+    msg: |
+      Docker installation completed
+      Version: {{ docker_version_check.stdout }}
+      Service status: Started and enabled
+      {{ 'Docker was already installed and running' if not docker_needs_installation else 'Docker installation completed successfully' }}

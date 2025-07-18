@@ -121,4 +121,5 @@
 
 - name: Display Docker installation status
   debug:
-    msg: "{{ 'Docker was already installed and running' if not docker_needs_installation else 'Docker installation completed' }}"
+    msg: |
+      {{ 'Docker was already installed and running' if not docker_needs_installation else 'Docker installation completed' }}

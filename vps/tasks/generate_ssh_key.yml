@@ -7,7 +7,8 @@
 
 - name: Skip password prompt if using SSH key authentication
   debug:
-    msg: "Using SSH key authentication - password prompt will be skipped"
+    msg: |
+      Using SSH key authentication - password prompt will be skipped
   when: not using_password_auth
   run_once: true
 
@@ -95,11 +96,12 @@
 
 - name: Display SSH key information
   debug:
-    msg:
-      - "SSH key pair generated for user '{{ custom_user }}' on host '{{ inventory_hostname }}'"
-      - "Private key: {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}"
-      - "Public key: {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}.pub"
-      - ""
-      - "After deployment, connect using:"
-      - "ssh -i {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}"
+    msg: |
+      SSH key pair generated for user '{{ custom_user }}' on host '{{ inventory_hostname }}'
+      Private key: {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}
+      Public key: {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}.pub
+      After deployment, connect using:
+      ssh -i {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}
+      To test SSH key authentication manually:
+      ./scripts/test-ssh-key.sh
   run_once: true

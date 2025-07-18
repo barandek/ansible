@@ -109,39 +109,37 @@
 
 - name: Display safety check results
   debug:
-    msg:
-      - "=== SAFETY CHECK RESULTS ==="
-      - "Custom user exists: {{ 'YES' if custom_user_check.name is defined else 'NO' }}"
-      - "Sudo access configured: {{ 'YES' if sudo_check.rc == 0 else 'NO' }}"
-      - "SSH authorized_keys exists: {{ 'YES' if ssh_key_check.stat.exists else 'NO' }}"
-      - "SSH key content present: {{ 'YES' if ssh_key_content.stdout | length > 0 else 'NO' }}"
-      - "SSH key authentication test: {{ 'PASS' if ssh_verification_test.rc == 0 else 'FAIL' }}"
-      - ""
-      - "{{ 'SAFE TO DISABLE ROOT ACCESS' if (custom_user_check.name is defined and sudo_check.rc == 0 and ssh_key_check.stat.exists and ssh_key_content.stdout | length > 0) else 'NOT SAFE - KEEPING ROOT ACCESS ENABLED' }}"
+    msg: |
+      === SAFETY CHECK RESULTS ===
+      Custom user exists: {{ 'YES' if custom_user_check.name is defined else 'NO' }}
+      Sudo access configured: {{ 'YES' if sudo_check.rc == 0 else 'NO' }}
+      SSH authorized_keys exists: {{ 'YES' if ssh_key_check.stat.exists else 'NO' }}
+      SSH key content present: {{ 'YES' if ssh_key_content.stdout | length > 0 else 'NO' }}
+      SSH key authentication test: {{ 'PASS' if ssh_verification_test.rc == 0 else 'FAIL' }}
+      Status: {{ 'SAFE TO DISABLE ROOT ACCESS' if (custom_user_check.name is defined and sudo_check.rc == 0 and ssh_key_check.stat.exists and ssh_key_content.stdout | length > 0) else 'NOT SAFE - KEEPING ROOT ACCESS ENABLED' }}
 
 - name: Set safety flag based on checks
   set_fact:
     safe_to_disable_root: "{{ 
-        custom_user_check.name is defined and 
-        sudo_check.rc == 0 and 
-        ssh_key_check.stat.exists and 
-        ssh_key_content.stdout | length > 0 and
-        (ssh_verification_test.rc == 0 if ssh_verification_test is defined else true)
-      }}"
+      custom_user_check.name is defined and 
+      sudo_check.rc == 0 and 
+      ssh_key_check.stat.exists and 
+      ssh_key_content.stdout | length > 0 and
+      (ssh_verification_test.rc == 0 if ssh_verification_test is defined else true)
+    }}"
 
 - name: Warning if not safe to disable root access
   debug:
-    msg:
-      - "⚠️  WARNING: Safety checks failed!"
-      - "Root password authentication will NOT be disabled."
-      - "Please verify:"
-      - "  1. Custom user '{{ custom_user }}' exists and has sudo access"
-      - "  2. SSH key is properly configured in authorized_keys"
-      - "  3. SSH key authentication works"
-      - ""
-      - "You can manually disable root access later with:"
-      - "  sudo passwd -l root"
-      - "  sudo usermod -s /usr/sbin/nologin root"
+    msg: |
+      WARNING: Safety checks failed!
+      Root password authentication will NOT be disabled.
+      Please verify:
+        1. Custom user '{{ custom_user }}' exists and has sudo access
+        2. SSH key is properly configured in authorized_keys
+        3. SSH key authentication works
+      You can manually disable root access later with:
+        sudo passwd -l root
+        sudo usermod -s /usr/sbin/nologin root
   when: not safe_to_disable_root
 
 - name: Disable root password authentication (FINAL STEP - ONLY IF SAFE)
@@ -149,6 +147,7 @@
     name: root
     password: "!"
   when: 
+    - ansible_user == "root"
     - safe_to_disable_root
 
 - name: Disable root shell access (ADDITIONAL SECURITY)
@@ -156,18 +155,18 @@
     name: root
     shell: /usr/sbin/nologin
   when: 
+    - ansible_user == "root"
     - safe_to_disable_root
     - disable_root_shell | default(true)
 
 - name: Display security hardening completion
   debug:
-    msg:
-      - "✅ SSH hardening applied successfully"
-      - "{{ 'Root password authentication disabled' if safe_to_disable_root else '⚠️  Root password authentication KEPT ENABLED (safety check failed)' }}"
-      - "{{ 'Root shell access disabled' if safe_to_disable_root else '⚠️  Root shell access KEPT ENABLED (safety check failed)' }}"
-      - "✅ SSH password authentication disabled"
-      - "✅ Fail2ban intrusion prevention enabled"
-      - "✅ System security parameters configured"
-      - ""
-      - "{{ '✅ IMPORTANT: Root access is now DISABLED' if safe_to_disable_root else '⚠️  IMPORTANT: Root access is still ENABLED' }}"
-      - "{{ '✅ Use only SSH keys for authentication from now on' if safe_to_disable_root else '⚠️  Fix the issues above and manually disable root access' }}"
+    msg: |
+      SSH hardening applied successfully
+      {{ 'Root password authentication disabled' if safe_to_disable_root else 'Root password authentication KEPT ENABLED (safety check failed)' }}
+      {{ 'Root shell access disabled' if safe_to_disable_root else 'Root shell access KEPT ENABLED (safety check failed)' }}
+      SSH password authentication disabled
+      Fail2ban intrusion prevention enabled
+      System security parameters configured
+      {{ 'IMPORTANT: Root access is now DISABLED' if safe_to_disable_root else 'IMPORTANT: Root access is still ENABLED' }}
+      {{ 'Use only SSH keys for authentication from now on' if safe_to_disable_root else 'Fix the issues above and manually disable root access' }}

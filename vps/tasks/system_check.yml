@@ -6,14 +6,6 @@
       - hardware
       - network
 
-- name: Debug system requirements
-  debug:
-    msg:
-      - "Raw min_cpu_cores: {{ min_cpu_cores }} (type: {{ min_cpu_cores | type_debug }})"
-      - "Raw min_memory_gb: {{ min_memory_gb }} (type: {{ min_memory_gb | type_debug }})"
-      - "ansible_processor_vcpus: {{ ansible_processor_vcpus }} (type: {{ ansible_processor_vcpus | type_debug }})"
-      - "ansible_memtotal_mb: {{ ansible_memtotal_mb }} (type: {{ ansible_memtotal_mb | type_debug }})"
-
 - name: Check CPU cores
   fail:
     msg: "System has {{ ansible_processor_vcpus }} CPU cores, minimum required: {{ min_cpu_cores | int }}"
@@ -26,16 +18,15 @@
 
 - name: Display system information
   debug:
-    msg:
-      - "=== SYSTEM INFORMATION ==="
-      - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
-      - "Architecture: {{ ansible_architecture }}"
-      - "CPU Cores: {{ ansible_processor_vcpus }}"
-      - "Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB"
-      - ""
-      - "=== REQUIREMENTS CHECK ==="
-      - "Required CPU Cores: {{ min_cpu_cores | int }}"
-      - "Required Memory: {{ min_memory_gb | int }}GB"
-      - "CPU Check: {{ 'PASS' if ansible_processor_vcpus | int >= min_cpu_cores | int else 'FAIL' }}"
-      - "Memory Check: {{ 'PASS' if (ansible_memtotal_mb | int / 1024) >= (min_memory_gb | int) else 'FAIL' }}"
-      - "Overall Status: {{ 'REQUIREMENTS MET' if (ansible_processor_vcpus | int >= min_cpu_cores | int) and ((ansible_memtotal_mb | int / 1024) >= (min_memory_gb | int)) else 'REQUIREMENTS NOT MET' }}"
+    msg: |
+      === SYSTEM INFORMATION ===
+      OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+      Architecture: {{ ansible_architecture }}
+      CPU Cores: {{ ansible_processor_vcpus }}
+      Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB
+      === REQUIREMENTS CHECK ===
+      Required CPU Cores: {{ min_cpu_cores | int }}
+      Required Memory: {{ min_memory_gb | int }}GB
+      CPU Check: {{ 'PASS' if ansible_processor_vcpus | int >= min_cpu_cores | int else 'FAIL' }}
+      Memory Check: {{ 'PASS' if (ansible_memtotal_mb | int / 1024) >= (min_memory_gb | int) else 'FAIL' }}
+      Overall Status: {{ 'REQUIREMENTS MET' if (ansible_processor_vcpus | int >= min_cpu_cores | int) and ((ansible_memtotal_mb | int / 1024) >= (min_memory_gb | int)) else 'REQUIREMENTS NOT MET' }}

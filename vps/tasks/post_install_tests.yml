@@ -37,14 +37,12 @@
 
 - name: Display test results
   debug:
-    msg:
-      - "=== POST-INSTALLATION TEST RESULTS ==="
-      - "✅ Docker: {{ docker_version.stdout }}"
-      - "{{ '✅' if docker_compose_available else '❌' }} Docker Compose: {{ docker_compose_version_output if docker_compose_available else 'Not available' }}"
-      - ""
-      - "Firewall Status:"
-      - "{{ 'UFW: ' + (ufw_status.stdout_lines[0] if ufw_status is defined and ufw_status.rc == 0 else 'Not configured') if ansible_os_family in ['Debian', 'Archlinux'] else '' }}"
-      - "{{ 'Firewalld: Active' if firewalld_status is defined and firewalld_status.rc == 0 else '  Firewalld: Not configured' if ansible_os_family in ['RedHat', 'Suse'] else '' }}"
-      - "{{ 'iptables: Configured' if iptables_status is defined and iptables_status.rc == 0 else '  iptables: Not configured' if ansible_os_family == 'Alpine' else '' }}"
-      - "Fail2ban SSH jail: {{ 'Active' if fail2ban_status.rc == 0 else 'Not active' }}"
-      - "{{ '⚠️  Docker Compose installation needs attention' if not docker_compose_available else '✅ All tests passed successfully!' }}"
+    msg: |
+      === POST-INSTALLATION TEST RESULTS ===
+      Docker: {{ docker_version.stdout }}
+      Docker Compose: {{ docker_compose_version_output if docker_compose_available else 'Not available' }}
+      Firewall Status:
+        {{ 'UFW: ' + (ufw_status.stdout_lines[0] if ufw_status is defined and ufw_status.rc == 0 else 'Not configured') if ansible_os_family in ['Debian', 'Archlinux'] else 'Firewalld: ' + ('Active' if firewalld_status is defined and firewalld_status.rc == 0 else 'Not configured') if ansible_os_family in ['RedHat', 'Suse'] else 'iptables: ' + ('Configured' if iptables_status is defined and iptables_status.rc == 0 else 'Not configured') }}
+      Security:
+        Fail2ban SSH jail: {{ 'Active' if fail2ban_status.rc == 0 else 'Not active' }}
+      Status: {{ 'All tests passed successfully!' if docker_compose_available else 'Docker Compose installation needs attention' }}
