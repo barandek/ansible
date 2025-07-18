@@ -1,0 +1,98 @@
+
+---
+# Multi-Host Configuration
+# This file uses vault variables for sensitive data
+
+# =============================================================================
+# DYNAMIC HOST CONFIGURATION
+# =============================================================================
+# These are automatically set from inventory (which gets them from vault)
+# No need to redefine them here since they're already available as:
+# - inventory_hostname (the host name)
+# - ansible_user (from vault)
+# - auth_method (from vault)
+# - ansible_ssh_pass (from vault)
+# - ansible_ssh_private_key_file (from vault)
+
+# Custom User Configuration (host-specific)
+custom_user: "deploy"
+custom_user_ssh_key_dir: "~/.ssh"
+custom_user_ssh_key_name: "{{ inventory_hostname }}_{{ custom_user }}_key"
+
+# =============================================================================
+# ROLE-BASED CONFIGURATION
+# =============================================================================
+# Different configurations based on server role
+role_configs:
+  coolify:
+    enable_coolify_ports: true
+    enable_custom_firewall: false
+    min_cpu_cores: 2
+    min_memory_gb: 4
+    coolify_ports:
+      - { port: 8000, proto: tcp, comment: "Coolify dashboard HTTP" }
+      - { port: 6001, proto: tcp, comment: "Real-time communications" }
+      - { port: 6002, proto: tcp, comment: "Terminal access" }
+      - { port: 80, proto: tcp, comment: "HTTP traffic" }
+      - { port: 443, proto: tcp, comment: "HTTPS traffic" }
+      
+  database:
+    enable_coolify_ports: false
+    enable_custom_firewall: false
+    min_cpu_cores: 4
+    min_memory_gb: 8
+    ssh_port: 2222  # Custom SSH port for database
+    fail2ban_bantime: 7200  # Stricter security
+    coolify_ports:
+      - { port: 5432, proto: tcp, comment: "PostgreSQL" }
+      - { port: 6379, proto: tcp, comment: "Redis" }
+      
+  application:
+    enable_coolify_ports: false
+    enable_custom_firewall: true
+    min_cpu_cores: 2
+    min_memory_gb: 4
+    coolify_ports:
+      - { port: 3000, proto: tcp, comment: "Node.js application" }
+      - { port: 8080, proto: tcp, comment: "Application API" }
+      - { port: 80, proto: tcp, comment: "HTTP traffic" }
+      - { port: 443, proto: tcp, comment: "HTTPS traffic" }
+
+# Apply role-based configuration
+current_role_config: "{{ role_configs[server_role] | default(role_configs.coolify) }}"
+
+# =============================================================================
+# SSH CONFIGURATION
+# =============================================================================
+ssh_port: "{{ current_role_config.ssh_port | default(22) }}"
+ssh_max_auth_tries: 3
+ssh_client_alive_interval: 300
+ssh_client_alive_count_max: 2
+
+# =============================================================================
+# FIREWALL CONFIGURATION
+# =============================================================================
+enable_custom_firewall: "{{ current_role_config.enable_custom_firewall | default(false) }}"
+enable_coolify_ports: "{{ current_role_config.enable_coolify_ports | default(true) }}"
+
+# Ports configuration based on role
+coolify_ports: "{{ current_role_config.coolify_ports | default([]) }}"
+
+# Custom Firewall Configuration
+github_webhook_ips: []
+
+# SSH Access Control (OPTIONAL - empty list allows all IPs)
+allowed_ssh_ips: []
+
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+fail2ban_bantime: "{{ current_role_config.fail2ban_bantime | default(3600) }}"
+fail2ban_findtime: 600
+fail2ban_maxretry: 3
+
+# =============================================================================
+# SYSTEM REQUIREMENTS (without quotes to preserve integer type)
+# =============================================================================
+min_cpu_cores: "{{ current_role_config.min_cpu_cores | default(2) }}"
+min_memory_gb: "{{ current_role_config.min_memory_gb | default(2) }}"

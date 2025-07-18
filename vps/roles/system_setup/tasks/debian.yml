@@ -1,0 +1,21 @@
+
+---
+- name: Install essential packages (Debian/Ubuntu)
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - htop
+      - vim
+      - unzip
+      - software-properties-common
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3-pip
+      - ufw
+      - fail2ban
+    state: present
+    update_cache: yes

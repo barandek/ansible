@@ -1,0 +1,125 @@
+
+---
+- name: Check if Docker is already properly installed
+  command: docker --version
+  register: docker_check
+  failed_when: false
+  changed_when: false
+
+- name: Check if Docker service is running
+  systemd:
+    name: docker
+  register: docker_service_check
+  failed_when: false
+
+- name: Set Docker installation status
+  set_fact:
+    docker_needs_installation: "{{ docker_check.rc != 0 or docker_service_check.status.ActiveState != 'active' }}"
+
+- name: Docker installation block
+  block:
+    - name: Check for conflicting Docker repository configurations
+      shell: |
+        # Check if there are conflicting repository entries
+        if grep -r "download.docker.com" /etc/apt/sources.list.d/ 2>/dev/null | grep -v "signed-by=/etc/apt/keyrings/docker.gpg" | head -1; then
+          echo "conflicts_found"
+        elif grep "download.docker.com" /etc/apt/sources.list 2>/dev/null; then
+          echo "conflicts_found"
+        else
+          echo "no_conflicts"
+        fi
+      register: docker_repo_conflicts
+      changed_when: false
+
+    - name: Clean up conflicting Docker configurations if found
+      block:
+        - name: Remove old Docker packages
+          apt:
+            name:
+              - docker
+              - docker-engine
+              - docker.io
+              - containerd
+              - runc
+            state: absent
+          ignore_errors: yes
+
+        - name: Remove all existing Docker repository configurations
+          shell: |
+            # Remove Docker repository files
+            rm -f /etc/apt/sources.list.d/docker*
+            rm -f /etc/apt/keyrings/docker*
+            rm -f /usr/share/keyrings/docker*
+            
+            # Remove Docker entries from main sources.list
+            sed -i '/download\.docker\.com/d' /etc/apt/sources.list
+            
+            # Clean apt cache and lists
+            apt-get clean
+            rm -rf /var/lib/apt/lists/*
+          ignore_errors: yes
+
+        - name: Update apt cache after cleanup
+          apt:
+            update_cache: yes
+            cache_valid_time: 0
+
+      when: docker_repo_conflicts.stdout == "conflicts_found"
+
+    - name: Install prerequisites for Docker repository
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Create directory for Docker GPG key
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download and add Docker GPG key
+      shell: |
+        curl -fsSL https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod 644 /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Add Docker repository
+      shell: |
+        echo "deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable" > /etc/apt/sources.list.d/docker.list
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Update apt cache after adding Docker repository
+      apt:
+        update_cache: yes
+
+    - name: Install Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Install additional Docker Compose package (fallback)
+      apt:
+        name: docker-compose
+        state: present
+      ignore_errors: yes
+
+  when: docker_needs_installation
+
+- name: Display Docker installation status
+  debug:
+    msg: |
+      {{ 'Docker was already installed and running' if not docker_needs_installation else 'Docker installation completed' }}

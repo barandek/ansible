@@ -1,0 +1,87 @@
+
+---
+- name: VPS Server Setup and Hardening (Multi-Host)
+  hosts: all
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - group_vars/vault.yml
+  serial: 1  # Deploy one host at a time
+      
+  pre_tasks:
+    - name: Display current host information
+      debug:
+        msg: |
+          === CONFIGURING HOST: {{ inventory_hostname }} ===
+          Role: {{ server_role }}
+          Environment: {{ environment_name }}
+          Authentication: {{ auth_method }}
+          Target IP: {{ ansible_host }}
+
+    - name: Set password variable for password authentication
+      set_fact:
+        ansible_ssh_pass: "{{ ansible_ssh_pass }}"
+      when: auth_method == "password" and ansible_ssh_pass is defined
+      no_log: true
+      
+    - name: Check system requirements
+      include_tasks: tasks/system_check.yml
+      tags: [always]
+      when: skip_system_check | default(false) == false
+
+    - name: Generate SSH key pair for custom user
+      include_tasks: tasks/generate_ssh_key.yml
+      tags: [always]
+      run_once: false  # Generate for each host
+
+  roles:
+    - role: system_setup
+      tags: [system]
+    - role: docker_setup
+      tags: [docker]
+      when: server_role in ['coolify']  # Only install Docker on web/app servers
+    - role: user_management
+      tags: [users]
+    - role: security_hardening
+      tags: [security]
+    - role: firewall_setup
+      tags: [firewall]
+      when: enable_coolify_ports or enable_custom_firewall
+
+  post_tasks:
+    - name: Run post-installation tests
+      include_tasks: tasks/post_install_tests.yml
+      tags: [tests]
+
+    - name: Display host-specific configuration info
+      debug:
+        msg: |
+          === {{ inventory_hostname }} CONFIGURATION ===
+          Server Role: {{ server_role }}
+          Environment: {{ environment_name }}
+          Coolify ports enabled: {{ enable_coolify_ports }}
+          Custom firewall enabled: {{ enable_custom_firewall }}
+          SSH Port: {{ ssh_port }}
+          Min CPU Cores: {{ min_cpu_cores }}
+          Min Memory GB: {{ min_memory_gb }}
+      tags: [always]
+
+    - name: Display final connection information
+      debug:
+        msg: |
+          === {{ inventory_hostname }} SETUP COMPLETED ===
+          Connect using the generated SSH key:
+          ssh -i {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}
+          IMPORTANT SECURITY CHANGES:
+            - Root password authentication has been DISABLED
+            - SSH password authentication has been DISABLED
+            - Only SSH key authentication is allowed
+            - User '{{ custom_user }}' has been created with sudo access
+          Security features enabled:
+            - SSH hardening applied (Port: {{ ssh_port }})
+            - Fail2ban intrusion prevention active
+            - Firewall configured for {{ server_role }} role
+          {{ '- Docker installed and configured' if server_role in ['coolify'] else '- Docker skipped for ' + server_role + ' role' }}
+          Authentication method used: {{ auth_method }}
+          Environment: {{ environment_name }}
+      tags: [always]

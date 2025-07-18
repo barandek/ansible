@@ -1,0 +1,107 @@
+
+---
+- name: Check if password authentication is being used
+  set_fact:
+    using_password_auth: "{{ auth_method == 'password' }}"
+  run_once: true
+
+- name: Skip password prompt if using SSH key authentication
+  debug:
+    msg: |
+      Using SSH key authentication - password prompt will be skipped
+  when: not using_password_auth
+  run_once: true
+
+- name: Expand SSH key directory path
+  set_fact:
+    expanded_ssh_key_dir: "{{ custom_user_ssh_key_dir | expanduser }}"
+  run_once: true
+
+- name: Generate hostname-based SSH key name
+  set_fact:
+    hostname_based_key_name: "{{ inventory_hostname | regex_replace('[^a-zA-Z0-9._-]', '_') }}_{{ custom_user }}_key"
+  run_once: true
+
+- name: Use hostname-based key name
+  set_fact:
+    final_ssh_key_name: "{{ hostname_based_key_name }}"
+  run_once: true
+
+- name: Get current user information for SSH key ownership
+  become: no
+  set_fact:
+    local_user: "{{ ansible_user_id }}"
+    local_user_home: "{{ ansible_user_dir }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Create SSH key directory if it doesn't exist
+  become: no
+  file:
+    path: "{{ expanded_ssh_key_dir }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  run_once: true
+
+- name: Check if SSH key already exists
+  become: no
+  stat:
+    path: "{{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}"
+  register: ssh_key_stat
+  delegate_to: localhost
+  run_once: true
+
+- name: Generate SSH key pair for custom user with hostname
+  become: no
+  openssh_keypair:
+    path: "{{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}"
+    type: rsa
+    size: 4096
+    comment: "{{ custom_user }}@{{ inventory_hostname }}"
+    force: no
+  delegate_to: localhost
+  run_once: true
+  when: not ssh_key_stat.stat.exists
+
+- name: Set SSH private key file permissions and ownership
+  become: no
+  file:
+    path: "{{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+
+- name: Set SSH public key file permissions and ownership
+  become: no
+  file:
+    path: "{{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}.pub"
+    mode: '0644'
+  delegate_to: localhost
+  run_once: true
+
+- name: Read generated public key
+  become: no
+  slurp:
+    src: "{{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}.pub"
+  register: generated_public_key
+  delegate_to: localhost
+  run_once: true
+
+- name: Set custom user SSH key fact
+  set_fact:
+    custom_user_ssh_key: "{{ generated_public_key.content | b64decode | trim }}"
+    custom_user_ssh_key_name: "{{ final_ssh_key_name }}"
+  run_once: true
+
+- name: Display SSH key information
+  debug:
+    msg: |
+      SSH key pair generated for user '{{ custom_user }}' on host '{{ inventory_hostname }}'
+      Private key: {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}
+      Public key: {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }}.pub
+      After deployment, connect using:
+      ssh -i {{ expanded_ssh_key_dir }}/{{ final_ssh_key_name }} {{ custom_user }}@{{ ansible_host }}
+      To test SSH key authentication manually:
+      ./scripts/test-ssh-key.sh
+  run_once: true

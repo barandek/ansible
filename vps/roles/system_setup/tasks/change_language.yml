@@ -1,0 +1,138 @@
+
+---
+- name: Set System Language to English
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Default English locale settings
+    default_locale: "en_US.UTF-8"
+    fallback_locale: "C.UTF-8"
+    
+    # Locale environment variables to set
+    locale_vars:
+      LANG: "{{ default_locale }}"
+      LANGUAGE: "en_US:en"
+      LC_ALL: "{{ default_locale }}"
+      LC_CTYPE: "{{ default_locale }}"
+      LC_NUMERIC: "{{ default_locale }}"
+      LC_TIME: "{{ default_locale }}"
+      LC_COLLATE: "{{ default_locale }}"
+      LC_MONETARY: "{{ default_locale }}"
+      LC_MESSAGES: "{{ default_locale }}"
+      LC_PAPER: "{{ default_locale }}"
+      LC_NAME: "{{ default_locale }}"
+      LC_ADDRESS: "{{ default_locale }}"
+      LC_TELEPHONE: "{{ default_locale }}"
+      LC_MEASUREMENT: "{{ default_locale }}"
+      LC_IDENTIFICATION: "{{ default_locale }}"
+
+  tasks:
+    - name: Display current locale information
+      debug:
+        msg: |
+          === CURRENT LOCALE INFORMATION ===
+          Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Current LANG: {{ ansible_env.LANG | default('Not set') }}
+          Current LC_ALL: {{ ansible_env.LC_ALL | default('Not set') }}
+
+    # Debian/Ubuntu specific tasks
+    - name: Install locales package (Debian/Ubuntu)
+      apt:
+        name: locales
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Generate English locale (Debian/Ubuntu)
+      locale_gen:
+        name: "{{ default_locale }}"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Set default locale (Debian/Ubuntu)
+      debconf:
+        name: locales
+        question: locales/default_environment_locale
+        value: "{{ default_locale }}"
+        vtype: select
+      when: ansible_os_family == "Debian"
+
+    - name: Configure locale in /etc/default/locale (Debian/Ubuntu)
+      lineinfile:
+        path: /etc/default/locale
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        create: yes
+      loop: "{{ locale_vars | dict2items }}"
+      when: ansible_os_family == "Debian"
+
+    # Universal tasks for all distributions
+    - name: Set locale environment variables in /etc/environment
+      lineinfile:
+        path: /etc/environment
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        create: yes
+      loop: "{{ locale_vars | dict2items }}"
+
+    - name: Create locale profile script for all users
+      copy:
+        content: |
+          # Set English locale as default
+          export LANG={{ default_locale }}
+          export LANGUAGE=en_US:en
+          export LC_ALL={{ default_locale }}
+        dest: /etc/profile.d/00-locale.sh
+        mode: '0644'
+
+    - name: Update current session locale (if possible)
+      shell: |
+        export LANG={{ default_locale }}
+        export LC_ALL={{ default_locale }}
+        export LANGUAGE=en_US:en
+      changed_when: false
+
+    # Verification tasks
+    - name: Check available locales
+      command: locale -a
+      register: available_locales
+      changed_when: false
+
+    - name: Verify English locale is available
+      debug:
+        msg: |
+          English locale {{ default_locale }} is {{ 'available' if default_locale in available_locales.stdout else 'NOT available' }}
+
+    - name: Check current locale settings
+      command: locale
+      register: current_locale
+      changed_when: false
+
+    - name: Display locale verification
+      debug:
+        msg: |
+          === LOCALE VERIFICATION ===
+          Available locales containing 'en':
+          {{ available_locales.stdout_lines | select('match', '.*en.*') | list | join('\n') }}
+          
+          Current locale settings:
+          {{ current_locale.stdout_lines | join('\n') }}
+
+    - name: Display completion message
+      debug:
+        msg: |
+          === LOCALE CONFIGURATION COMPLETED ===
+          System locale has been set to English ({{ default_locale }})
+          Changes will take effect for new login sessions
+          To apply immediately to current session, run:
+            source /etc/profile.d/00-locale.sh
+            export LANG={{ default_locale }}
+            export LC_ALL={{ default_locale }}
+          
+          Reboot recommended to ensure all services use the new locale
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes

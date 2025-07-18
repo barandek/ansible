@@ -1,0 +1,63 @@
+
+all:
+  hosts:
+    vps-server: {}
+    db-primary: {}
+    app-server: {}
+
+  vars:
+    # Common settings
+    ansible_python_interpreter: auto_silent
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    
+    # Default values for all hosts
+    _defaults:
+      ansible_user: root
+      ansible_password: SuperSecretPassword123
+      server_role: coolify
+      environment_name: development
+      auth_method: password
+    
+    # Dynamic configuration: automatically merge vault config with defaults
+    # This creates ALL variables from vault dynamically - no need to specify each one!
+    # If vault has a key, use vault value; if not, use default; if no default, skip it
+    _vault_config: "{{ vault_hosts[inventory_hostname] if vault_hosts is defined and inventory_hostname in vault_hosts else {} }}"
+    
+    # Merge defaults with vault config - vault values override defaults
+    _merged_vars: "{{ _defaults | combine(_vault_config, recursive=true) }}"
+    
+    # Dynamically expose all variables from the merged config
+    ansible_host: "{{ _merged_vars.ansible_host | default(omit) }}"
+    ansible_user: "{{ _merged_vars.ansible_user }}"
+    ansible_ssh_private_key_file: "{{ _merged_vars.ansible_ssh_private_key_file | default(omit) }}"
+    ansible_ssh_pass: "{{ _merged_vars.ansible_ssh_pass | default(omit) }}"
+    server_role: "{{ _merged_vars.server_role }}"
+    environment_name: "{{ _merged_vars.environment | default(_merged_vars.environment_name) }}"
+    auth_method: "{{ _merged_vars.auth_method }}"
+
+  children:
+    vps:
+      hosts:
+        vps-server: {}
+    databases:
+      hosts:
+        db-primary: {}
+    applications:
+      hosts:
+        app-server-stg: {}
+        app-server-dev: {}
+    coolify:
+      hosts:
+        vps-server: {}
+        
+    # Environment groups
+    production:
+      hosts:
+        vps-server: {}
+        db-primary: {}
+    staging:
+      hosts:
+        app-server-stg: {}
+    development:
+      hosts:
+        app-server-dev: {}
