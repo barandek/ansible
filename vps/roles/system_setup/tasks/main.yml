@@ -70,3 +70,6 @@
     - { name: "net.ipv4.conf.default.log_martians", value: "1" }
     - { name: "kernel.dmesg_restrict", value: "1" }
     - { name: "kernel.kptr_restrict", value: "2" }
+
+- name: Set system language to English
+  include_tasks: change_language.yml
