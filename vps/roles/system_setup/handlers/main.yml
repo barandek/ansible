@@ -1,0 +1,6 @@
+---
+- name: update locale
+  shell: |
+    locale-gen
+    update-locale
+  ignore_errors: yes
