@@ -5,8 +5,6 @@
   file:
     path: "{{ item }}"
     state: directory
-    owner: 9999
-    group: root
     mode: '0700'
   loop:
     - /data/coolify/source
@@ -18,23 +16,20 @@
     - /data/coolify/proxy
     - /data/coolify/webhooks-during-maintenance
 
-- name: Create SSH directories
+- name: Create SSH, proxy directories
   file:
     path: "{{ item }}"
     state: directory
-    owner: 9999
-    group: root
     mode: '0700'
   loop:
     - /data/coolify/ssh/keys
     - /data/coolify/ssh/mux
+    - /data/coolify/proxy/dynamic
 
-- name: Create proxy directories
+- name: Set ownership of Coolify data directories
   file:
-    path: "{{ item }}"
-    state: directory
+    path: "/data/coolify"
     owner: 9999
     group: root
-    mode: '0700'
-  loop:
-    - /data/coolify/proxy/dynamic
+    mode: "0700"
+    recurse: yes

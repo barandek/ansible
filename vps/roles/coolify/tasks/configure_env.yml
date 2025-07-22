@@ -11,58 +11,83 @@
   become: no
   run_once: true
 
-- name: Generate Coolify credentials using openssl
-  shell: |
-    # Generate APP_ID (32 hex characters)
-    APP_ID=$(openssl rand -hex 16)
+- name: Check if .env file already exists
+  stat:
+    path: /data/coolify/source/.env
+  register: env_file_exists
 
-    # Generate APP_KEY (base64 encoded)
-    APP_KEY="base64:$(openssl rand -base64 32)"
+- name: Generate new Coolify credentials
+  block:
 
-    # Generate database password (base64 encoded)
-    DB_PASSWORD=$(openssl rand -base64 32)
+  - name: Generate new Coolify credentials (only if no backup exists)
+    shell: |
+      # Generate APP_ID (32 hex characters)
+      APP_ID=$(openssl rand -hex 16)
 
-    # Generate Redis password (base64 encoded)
-    REDIS_PASSWORD=$(openssl rand -base64 32)
+      # Generate APP_KEY (base64 encoded)
+      APP_KEY="base64:$(openssl rand -base64 32)"
 
-    # Generate Pusher credentials (32 hex characters each)
-    PUSHER_APP_ID=$(openssl rand -hex 32)
-    PUSHER_APP_KEY=$(openssl rand -hex 32)
-    PUSHER_APP_SECRET=$(openssl rand -hex 32)
+      # Generate database password (base64 encoded)
+      DB_PASSWORD=$(openssl rand -base64 32)
 
-    # Output as JSON for Ansible to parse
-    cat << EOF
-    {
-      "APP_ID": "$APP_ID",
-      "APP_KEY": "$APP_KEY", 
-      "DB_PASSWORD": "$DB_PASSWORD",
-      "REDIS_PASSWORD": "$REDIS_PASSWORD",
-      "PUSHER_APP_ID": "$PUSHER_APP_ID",
-      "PUSHER_APP_KEY": "$PUSHER_APP_KEY",
-      "PUSHER_APP_SECRET": "$PUSHER_APP_SECRET"
-    }
-    EOF
-  register: coolify_credentials_raw
-  delegate_to: localhost
-  become: no
-  run_once: true
+      # Generate Redis password (base64 encoded)
+      REDIS_PASSWORD=$(openssl rand -base64 32)
 
-- name: Parse generated credentials
-  set_fact:
-    coolify_credentials: "{{ coolify_credentials_raw.stdout | from_json }}"
+      # Generate Pusher credentials (32 hex characters each)
+      PUSHER_APP_ID=$(openssl rand -hex 32)
+      PUSHER_APP_KEY=$(openssl rand -hex 32)
+      PUSHER_APP_SECRET=$(openssl rand -hex 32)
 
-- name: Generate Coolify .env file (server)
-  template:
-    src: env.j2
-    dest: /data/coolify/source/.env
-    owner: 9999
-    group: root
-    mode: "0600"
+      # Output as JSON for Ansible to parse
+      cat << EOF
+      {
+        "APP_ID": "$APP_ID",
+        "APP_KEY": "$APP_KEY", 
+        "DB_PASSWORD": "$DB_PASSWORD",
+        "REDIS_PASSWORD": "$REDIS_PASSWORD",
+        "PUSHER_APP_ID": "$PUSHER_APP_ID",
+        "PUSHER_APP_KEY": "$PUSHER_APP_KEY",
+        "PUSHER_APP_SECRET": "$PUSHER_APP_SECRET"
+      }
+      EOF
+    register: coolify_credentials_raw
+    delegate_to: localhost
+    become: no
+    run_once: true
 
-- name: Generate Coolify .env backup (local)
-  template:
-    src: env.j2
-    dest: "{{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify/.env"
-    mode: "0600"
-  delegate_to: localhost
-  become: no
+  - name: Parse newly generated credentials
+    set_fact:
+      coolify_credentials: "{{ coolify_credentials_raw.stdout | from_json }}"
+
+  - name: Download Coolify configuration files
+    get_url:
+      url: "{{ item.url }}"
+      dest: "{{ item.dest }}"
+      mode: '0600'
+    loop:
+      - { url: 'https://cdn.coollabs.io/coolify/docker-compose.yml', dest: '/data/coolify/source/docker-compose.yml' }
+      - { url: 'https://cdn.coollabs.io/coolify/docker-compose.prod.yml', dest: '/data/coolify/source/docker-compose.prod.yml' }
+      - { url: 'https://cdn.coollabs.io/coolify/.env.production', dest: '/data/coolify/source/.env' }
+
+  - name: Download Coolify upgrade script with execute permissions
+    get_url:
+      url: 'https://cdn.coollabs.io/coolify/upgrade.sh'
+      dest: '/data/coolify/source/upgrade.sh'
+      mode: '0700'
+
+  - name: Generate Coolify .env file (server)
+    template:
+      src: env.j2
+      dest: /data/coolify/source/.env
+      mode: "0600"
+      backup: yes
+    register: env_file_updated
+
+  - name: Generate Coolify .env backup (local)
+    template:
+      src: env.j2
+      dest: "{{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify/.env"
+      mode: "0600"
+    delegate_to: localhost
+    become: no
+  when: not env_file_exists.stat.exists

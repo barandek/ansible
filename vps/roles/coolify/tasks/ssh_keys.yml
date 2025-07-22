@@ -8,63 +8,34 @@
   delegate_to: localhost
   become: no
 
-- name: Ensure Coolify SSH directory exists
-  file:
-    path: /data/coolify/ssh/keys
-    state: directory
-    owner: 9999
-    group: root
-    mode: "0700"
+- name: Check if Coolify SSH keys already exist
+  stat:
+    path: /data/coolify/ssh/keys/id.root@host.docker.internal
+  register: coolify_ssh_key_exists
 
-- name: Copy user's private key to Coolify
+- name: Copy user's private key to Coolify (only if not exists)
   copy:
     src: "{{ expanded_ssh_key_dir }}/{{ ssh_key_name }}"
     dest: /data/coolify/ssh/keys/id.root@host.docker.internal
     owner: 9999
     group: root
     mode: "0600"
-  when: custom_key_exists.stat.exists
+  when: 
+    - custom_key_exists.stat.exists
+    - not coolify_ssh_key_exists.stat.exists
 
-- name: Copy user's public key to Coolify
+- name: Copy user's public key to Coolify (only if not exists)
   copy:
     src: "{{ expanded_ssh_key_dir }}/{{ ssh_key_name }}.pub"
     dest: /data/coolify/ssh/keys/id.root@host.docker.internal.pub
-    owner: 9999
     group: root
     mode: "0644"
-  when: custom_key_exists.stat.exists
+  when: 
+    - custom_key_exists.stat.exists
+    - not coolify_ssh_key_exists.stat.exists
 
-- name: Fail if custom user's SSH key doesn't exist
-  fail:
-    msg: >
-      ERROR: user's SSH key not found at {{ expanded_ssh_key_dir }}/{{ ssh_key_name }}.
-      Please run the user_management role first to create the user and SSH key.
-      Command: ansible-playbook -i inventory.yml site.yml --tags users --ask-vault-pass
-  when: not custom_key_exists.stat.exists
-
-- name: Read Coolify public key
-  command: cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub
-  register: coolify_pubkey
-  changed_when: false
-
-- name: Ensure user's .ssh directory exists
-  file:
-    path: "/home/{{ ansible_user }}/.ssh"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0700"
-
-- name: Ensure user's authorized_keys file exists
-  file:
-    path: "/home/{{ ansible_user }}/.ssh/authorized_keys"
-    state: touch
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0600"
-
-- name: Add Coolify SSH key to user's authorized_keys
-  authorized_key:
-    user: "{{ ansible_user }}"
-    key: "{{ coolify_pubkey.stdout }}"
-    state: present
+- name: Display SSH key status
+  debug:
+    msg: |
+      SSH Keys: {{ 'Copied to Coolify' if (custom_key_exists.stat.exists and not coolify_ssh_key_exists.stat.exists) else 'Already exist in Coolify' }}
+      Source: {{ expanded_ssh_key_dir }}/{{ ssh_key_name }}
