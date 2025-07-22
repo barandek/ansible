@@ -1,0 +1,52 @@
+---
+# Main tasks for Coolify installation and configuration
+
+- name: Set deploy user facts and SSH key paths
+  set_fact:
+    coolify_deploy_user: "{{ ansible_user | default('deploy') }}"
+    expanded_ssh_key_dir: "{{ ssh_key_dir | expanduser }}"
+    ssh_key_name: "{{ inventory_hostname | regex_replace('[^a-zA-Z0-9._-]', '_') }}_{{ ansible_user }}_key"
+  tags: [coolify]
+
+- name: Check if Coolify installation is complete
+  stat:
+    path: "{{ item }}"
+  register: coolify_files_check
+  loop:
+    - /data/coolify/source/docker-compose.yml
+    - /data/coolify/source/docker-compose.prod.yml
+    - /data/coolify/source/.env
+    - /data/coolify/source/upgrade.sh
+  tags: [coolify]
+
+- name: Set installation status
+  set_fact:
+    coolify_fully_installed: "{{ coolify_files_check.results | map(attribute='stat.exists') | list | min }}"
+  tags: [coolify]
+
+- name: Create Coolify directories
+  include_tasks: directories.yml
+  when: not coolify_fully_installed
+  tags: [coolify]
+
+- name: Setup SSH keys
+  include_tasks: ssh_keys.yml
+  tags: [coolify]
+
+- name: Download configuration files
+  include_tasks: config_files.yml
+  when: not coolify_fully_installed
+  tags: [coolify]
+
+- name: Configure environment (run if .env missing or installation incomplete)
+  include_tasks: configure_env.yml
+  when: not coolify_fully_installed
+  tags: [coolify]
+
+- name: Start Coolify services
+  include_tasks: start_services.yml
+  tags: [coolify]
+
+- name: Display Coolify installation information
+  include_tasks: display_info.yml
+  tags: [coolify]

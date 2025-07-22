@@ -1,4 +1,3 @@
-
 ---
 - name: Test Docker installation
   command: docker --version
@@ -22,11 +21,12 @@
     docker_compose_available: "{{ docker_compose_plugin_version.rc == 0 or docker_compose_standalone_version.rc == 0 }}"
     docker_compose_version_output: "{{ docker_compose_plugin_version.stdout if docker_compose_plugin_version.rc == 0 else docker_compose_standalone_version.stdout }}"
 
-- name: Check UFW status
-  command: ufw status
-  register: ufw_status
+- name: Verify UFW is actually running
+  shell: |
+    systemctl is-active ufw && ufw status | grep -q "Status: active"
+  register: ufw_active_check
   changed_when: false
-  when: ansible_os_family in ["Debian", "Archlinux"]
+  when: ansible_os_family in ["Debian"]
   ignore_errors: yes
 
 - name: Check Fail2ban status
@@ -35,14 +35,18 @@
   changed_when: false
   ignore_errors: yes
 
+- name: Set UFW firewall status (Debian/Ubuntu)
+  set_fact:
+    firewall_status: "Service: {{ 'Active' if (ufw_active_check is defined and ufw_active_check.rc == 0) else 'Inactive' }})"
+  when: ansible_os_family in ["Debian"]
+
 - name: Display test results
   debug:
     msg: |
       === POST-INSTALLATION TEST RESULTS ===
       Docker: {{ docker_version.stdout }}
       Docker Compose: {{ docker_compose_version_output if docker_compose_available else 'Not available' }}
-      Firewall Status:
-        {{ 'UFW: ' + (ufw_status.stdout_lines[0] if ufw_status is defined and ufw_status.rc == 0 else 'Not configured') if ansible_os_family in ['Debian', 'Archlinux'] else 'Firewalld: ' + ('Active' if firewalld_status is defined and firewalld_status.rc == 0 else 'Not configured') if ansible_os_family in ['RedHat', 'Suse'] else 'iptables: ' + ('Configured' if iptables_status is defined and iptables_status.rc == 0 else 'Not configured') }}
       Security:
         Fail2ban SSH jail: {{ 'Active' if fail2ban_status.rc == 0 else 'Not active' }}
+        Firewall Status: {{ firewall_status }}
       Status: {{ 'All tests passed successfully!' if docker_compose_available else 'Docker Compose installation needs attention' }}

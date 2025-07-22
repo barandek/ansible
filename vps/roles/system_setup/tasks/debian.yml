@@ -19,3 +19,13 @@
       - fail2ban
     state: present
     update_cache: yes
+
+- name: Set up automatic security updates (Debian/Ubuntu)
+  apt:
+    name: unattended-upgrades
+    state: present
+
+- name: Configure automatic security updates (Debian/Ubuntu)
+  template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades

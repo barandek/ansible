@@ -46,14 +46,6 @@
 - name: Install Docker Compose using system package manager
   include_tasks: docker_compose.yml
 
-- name: Install ufw-docker script (Debian/Ubuntu/Arch only)
-  get_url:
-    url: https://raw.githubusercontent.com/chaifeng/ufw-docker/master/ufw-docker
-    dest: /usr/local/bin/ufw-docker
-    mode: '0755'
-  when: ansible_os_family == "Debian"
-  ignore_errors: yes
-
 - name: Display Docker installation status
   debug:
     msg: |

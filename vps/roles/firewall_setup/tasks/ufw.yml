@@ -1,0 +1,109 @@
+---
+- name: Build firewall rules list
+  set_fact:
+    firewall_rules: "{{ firewall_allow_ports + firewall_deny_ports }}"
+
+- name: Check current UFW status
+  command: ufw status verbose
+  register: current_ufw_status
+  changed_when: false
+  failed_when: false
+
+- name: Check current UFW policies
+  shell: |
+    ufw status verbose | grep -E "Default: (deny|allow) \((incoming|outgoing)\)"
+  register: current_policies
+  changed_when: false
+  failed_when: false
+
+- name: Set UFW default policies (only if needed)
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: "incoming", policy: "deny" }
+    - { direction: "outgoing", policy: "allow" }
+  when: >
+    current_policies.rc != 0 or
+    "Default: deny (incoming)" not in current_policies.stdout or
+    "Default: allow (outgoing)" not in current_policies.stdout
+
+- name: Configure firewall rules
+  ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    src: "{{ item.src | default(omit) }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ firewall_rules }}"
+
+- name: Enable UFW (only if not already enabled)
+  ufw:
+    state: enabled
+  when: "'Status: active' not in current_ufw_status.stdout"
+
+- name: Check if Docker is installed
+  command: docker --version
+  register: docker_check
+  changed_when: false
+  failed_when: false
+
+- name: Ensure UFW service is enabled and active
+  systemd:
+    name: ufw
+    enabled: yes
+    state: started
+  when: ansible_service_mgr == "systemd"
+
+- name: Force enable UFW if still inactive
+  shell: ufw --force enable
+  when: "'Status: active' not in current_ufw_status.stdout"
+
+- name: Wait for UFW to be fully active (only if changes were made)
+  pause:
+    seconds: 2
+  when: "'Status: active' not in current_ufw_status.stdout"
+
+- name: Verify UFW is active
+  command: ufw status
+  register: ufw_verify_status
+  changed_when: false
+  failed_when: "'Status: active' not in ufw_verify_status.stdout"
+
+- name: Display UFW status
+  command: ufw status numbered
+  register: ufw_status_output
+  changed_when: false
+
+- name: Check if UFW configuration changed
+  set_fact:
+    ufw_was_inactive: "{{ 'Status: active' not in current_ufw_status.stdout }}"
+    ufw_policies_changed: >-
+      {{
+        current_policies.rc != 0 or
+        "Default: deny (incoming)" not in current_policies.stdout or
+        "Default: allow (outgoing)" not in current_policies.stdout
+      }}
+
+- name: Show UFW configuration summary
+  debug:
+    msg: |
+      === UFW FIREWALL CONFIGURATION ===
+      {% for line in ufw_status_output.stdout_lines %}
+      {{ line }}
+      {% endfor %}
+
+      Configuration Summary:
+      - Total rules configured: {{ firewall_rules | length }}
+      - Allow rules: {{ firewall_allow_ports | length }}
+      - Deny rules: {{ firewall_deny_ports | length }}
+
+      Changes Made:
+      - UFW was {{ 'activated' if ufw_was_inactive else 'already active' }}
+      - Policies were {{ 'updated' if ufw_policies_changed else 'already correct' }}
+      - Rules applied idempotently (no unnecessary resets)
+      {% if docker_check.rc == 0 %}
+      - Docker detected: {{ 'Yes' }}
+      {% else %}
+      - Docker not detected: No Docker configuration needed
+      {% endif %}

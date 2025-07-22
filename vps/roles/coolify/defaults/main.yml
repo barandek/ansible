@@ -1,0 +1,24 @@
+---
+# Default variables for Coolify role
+
+# Coolify installation directory
+coolify_base_dir: /data/coolify
+
+# Coolify configuration
+coolify_user_id: 9999
+coolify_group: root
+
+# Coolify ports
+coolify_dashboard_port: 8000
+coolify_websocket_port: 6001
+coolify_terminal_port: 6002
+
+# Coolify CDN URLs
+coolify_cdn_base: https://cdn.coollabs.io/coolify
+coolify_docker_compose_url: "{{ coolify_cdn_base }}/docker-compose.yml"
+coolify_docker_compose_prod_url: "{{ coolify_cdn_base }}/docker-compose.prod.yml"
+coolify_env_url: "{{ coolify_cdn_base }}/.env.production"
+coolify_upgrade_url: "{{ coolify_cdn_base }}/upgrade.sh"
+
+# Coolify credentials are generated using openssl commands
+# to match the official installation specification
