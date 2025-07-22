@@ -45,14 +45,6 @@
     msg: "Docker Compose configuration is invalid. Please check the error messages above."
   when: compose_validation.rc != 0
 
-- name: Set ownership of Coolify data directories
-  file:
-    path: "/data/coolify"
-    owner: 9999
-    group: root
-    mode: "0700"
-    recurse: yes
-
 - name: Wait for Coolify to start
   pause:
     seconds: 10

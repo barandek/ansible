@@ -25,10 +25,6 @@ Variables are defined in `defaults/main.yml`:
 # Coolify installation directory
 coolify_base_dir: /data/coolify
 
-# Coolify configuration
-coolify_user_id: 9999
-coolify_group: root
-
 # Coolify ports
 coolify_dashboard_port: 8000
 coolify_websocket_port: 6001
