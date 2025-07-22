@@ -1,0 +1,14 @@
+---
+- name: Debug Connection Variables
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Display connection variables
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          IP: {{ ansible_host | default('Not set') }}
+          User: {{ ansible_user | default('Not set') }}
+          Auth Method: {{ auth_method | default('Not set') }}
+          SSH Key: {{ ansible_ssh_private_key_file | default('Not set') }}
+          Password Auth: {{ 'Enabled' if ansible_ssh_pass is defined else 'Disabled' }}

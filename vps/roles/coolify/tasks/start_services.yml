@@ -1,0 +1,63 @@
+---
+# Start Coolify services
+
+- name: Create Coolify network
+  community.docker.docker_network:
+    name: coolify
+    attachable: true
+
+- name: Ensure deploy user has access to Docker socket
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Validate Docker Compose configuration
+  shell: >
+    docker compose 
+    --env-file /data/coolify/source/.env 
+    -f /data/coolify/source/docker-compose.yml 
+    -f /data/coolify/source/docker-compose.prod.yml 
+    --project-directory /data/coolify/source 
+    config --quiet
+  register: compose_validation
+  failed_when: false
+
+- name: Display validation errors if any
+  debug:
+    msg: |
+      Docker Compose validation failed:
+      {{ compose_validation.stderr }}
+  when: compose_validation.rc != 0
+
+- name: Start Coolify services
+  shell: >
+    docker compose 
+    --env-file /data/coolify/source/.env 
+    -f /data/coolify/source/docker-compose.yml 
+    -f /data/coolify/source/docker-compose.prod.yml 
+    --project-directory /data/coolify/source 
+    up -d --pull always --remove-orphans --force-recreate
+  when: compose_validation.rc == 0
+
+- name: Fail if Docker Compose validation failed
+  fail:
+    msg: "Docker Compose configuration is invalid. Please check the error messages above."
+  when: compose_validation.rc != 0
+
+- name: Set ownership of Coolify data directories
+  file:
+    path: "/data/coolify"
+    owner: 9999
+    group: root
+    mode: "0700"
+    recurse: yes
+
+- name: Wait for Coolify to start
+  pause:
+    seconds: 10
+
+- name: Check if Coolify is running
+  command: docker ps --filter "name=coolify"
+  register: coolify_status
+  changed_when: false

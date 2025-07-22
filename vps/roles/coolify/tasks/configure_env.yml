@@ -1,0 +1,68 @@
+---
+# Configure Coolify environment variables
+# Note: lookup('password', ...) is idempotent - only generates new passwords if files don't exist
+
+- name: Create local backup directory for credentials
+  file:
+    path: "{{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: no
+  run_once: true
+
+- name: Generate Coolify credentials using openssl
+  shell: |
+    # Generate APP_ID (32 hex characters)
+    APP_ID=$(openssl rand -hex 16)
+
+    # Generate APP_KEY (base64 encoded)
+    APP_KEY="base64:$(openssl rand -base64 32)"
+
+    # Generate database password (base64 encoded)
+    DB_PASSWORD=$(openssl rand -base64 32)
+
+    # Generate Redis password (base64 encoded)
+    REDIS_PASSWORD=$(openssl rand -base64 32)
+
+    # Generate Pusher credentials (32 hex characters each)
+    PUSHER_APP_ID=$(openssl rand -hex 32)
+    PUSHER_APP_KEY=$(openssl rand -hex 32)
+    PUSHER_APP_SECRET=$(openssl rand -hex 32)
+
+    # Output as JSON for Ansible to parse
+    cat << EOF
+    {
+      "APP_ID": "$APP_ID",
+      "APP_KEY": "$APP_KEY", 
+      "DB_PASSWORD": "$DB_PASSWORD",
+      "REDIS_PASSWORD": "$REDIS_PASSWORD",
+      "PUSHER_APP_ID": "$PUSHER_APP_ID",
+      "PUSHER_APP_KEY": "$PUSHER_APP_KEY",
+      "PUSHER_APP_SECRET": "$PUSHER_APP_SECRET"
+    }
+    EOF
+  register: coolify_credentials_raw
+  delegate_to: localhost
+  become: no
+  run_once: true
+
+- name: Parse generated credentials
+  set_fact:
+    coolify_credentials: "{{ coolify_credentials_raw.stdout | from_json }}"
+
+- name: Generate Coolify .env file (server)
+  template:
+    src: env.j2
+    dest: /data/coolify/source/.env
+    owner: 9999
+    group: root
+    mode: "0600"
+
+- name: Generate Coolify .env backup (local)
+  template:
+    src: env.j2
+    dest: "{{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify/.env"
+    mode: "0600"
+  delegate_to: localhost
+  become: no

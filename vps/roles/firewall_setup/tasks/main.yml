@@ -1,0 +1,4 @@
+---
+- name: Configure UFW firewall (Debian/Ubuntu)
+  include_tasks: ufw.yml
+  when: ansible_os_family in ["Debian"]

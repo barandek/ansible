@@ -203,7 +203,7 @@ vault_hosts:
     ansible_user: "root"
     auth_method: "password"
     server_role: "coolify"
-    environment: "production"
+    environment_name: "production"
 ```
 
 ### 3. SSH Key Not Found
@@ -271,7 +271,7 @@ deploy is not in the sudoers file
 
 **Solution:**
 ```bash
-# Check sudoers file (replace 'username' with your custom_user)
+# Check sudoers file (replace 'username' with your ansible_user)
 sudo cat /etc/sudoers.d/username
 
 # Should contain: username ALL=(ALL) NOPASSWD:ALL

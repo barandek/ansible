@@ -1,10 +1,9 @@
-
 # SSH Configuration - Hardened
 Port {{ ssh_port }}
 Protocol 2
 
 # Authentication
-PermitRootLogin no
+PermitRootLogin prohibit-password
 PasswordAuthentication no
 PubkeyAuthentication yes
 AuthorizedKeysFile .ssh/authorized_keys
@@ -37,6 +36,3 @@ PermitTunnel no
 
 # Banner
 Banner /etc/ssh/banner
-
-# Allow only specific users
-AllowUsers {{ custom_user }}

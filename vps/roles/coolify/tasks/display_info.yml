@@ -1,0 +1,55 @@
+---
+# Display Coolify installation information
+
+- name: Set server IP address
+  set_fact:
+    server_ip: "{{ ansible_host }}"
+
+- name: Get Coolify container status
+  shell: docker ps --filter "name=coolify" --format "{{ '{{.Names}} - {{.Status}}' }}"
+  register: coolify_containers
+  changed_when: false
+
+- name: Display Coolify installation information
+  debug:
+    msg: |
+      === COOLIFY INSTALLATION COMPLETE ===
+
+      Access your Coolify dashboard at:
+      http:\\{{ server_ip }}:8000
+
+      Running containers:
+      {% for container in coolify_containers.stdout_lines %}
+      - {{ container }}
+      {% endfor %}
+
+      Important directories:
+      - Configuration: /data/coolify/source
+      - Applications: /data/coolify/applications
+      - Databases: /data/coolify/databases
+      - Backups: /data/coolify/backups
+
+      User Configuration:
+      - Using existing deploy user: {{ ansible_user }}
+      - SSH key integrated with Coolify
+      - User has Docker access for Coolify management
+
+      Credentials:
+      - Backup stored at: {{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify/.env
+      - IMPORTANT: Credentials are excluded from git via .gitignore
+
+      Management Commands (as {{ ansible_user }}):
+      - View Coolify logs: 
+          docker compose \
+          --env-file /data/coolify/source/.env \
+          -f /data/coolify/source/docker-compose.yml \
+          -f /data/coolify/source/docker-compose.prod.yml \
+          --project-directory /data/coolify/source logs -f
+      - Restart Coolify: 
+          docker compose \
+          --env-file /data/coolify/source/.env \
+          -f /data/coolify/source/docker-compose.yml \
+          -f /data/coolify/source/docker-compose.prod.yml \
+          --project-directory /data/coolify/source restart
+
+      For more information, visit: https:\\coolify.io/docs

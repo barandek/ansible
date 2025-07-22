@@ -11,10 +11,12 @@ vault_hosts:
   vps-server:
     ansible_host: "203.0.113.10"
     ansible_user: "root"
-    ansible_ssh_private_key_file: "/home/czit/.ssh/vps_server_key"
+    ansible_ssh_private_key_file: "/home/test/.ssh/vps_server_key"
     auth_method: "ssh_key"
     server_role: "webserver"
-    environment: "production"
+    environment_name: "production"
+    # ansible_become_pass: "SudoPassword123"  # Only needed if ansible_user is not root
+
     # Optional: Additional secrets for this host
     # api_keys: "coolify_api_key_123"
     # ssl_cert_password: "ssl_password_456"
@@ -23,10 +25,13 @@ vault_hosts:
   webserver01:
     ansible_host: "123.45.67.89"
     ansible_user: "deploy"
-    ansible_ssh_private_key_file: "/home/czit/.ssh/deploy_key"
+    ansible_become_pass: "SecurePassword123"  # Used for both SSH and sudo
+    auth_method: "password"
+    ansible_user: "deploy"
+    ansible_ssh_private_key_file: "/home/test/.ssh/deploy_key"
     auth_method: "ssh_key"
     server_role: "webserver"
-    environment: "production"
+    environment_name: "production"
     
   # Database Primary
   db-primary:
@@ -35,7 +40,7 @@ vault_hosts:
     ansible_password: "SuperSecretDBPassword!23"
     auth_method: "password"
     server_role: "database"
-    environment: "production"
+    environment_name: "production"
     # Database-specific secrets
     db_root_password: "AnotherDbRootPass"
     db_backup_password: "BackupPassword789"
@@ -44,10 +49,24 @@ vault_hosts:
   app-server:
     ansible_host: "203.0.113.50"
     ansible_user: "root"
-    ansible_ssh_private_key_file: "/home/czit/.ssh/app_server_key"
+    ansible_ssh_private_key_file: "/home/test/.ssh/app_server_key"
     auth_method: "ssh_key"
     server_role: "application"
-    environment: "staging"
+    environment_name: "staging"
+
+# =============================================================================
+# CUSTOM FIREWALL CONFIGURATION (OPTIONAL)
+# =============================================================================
+# Define custom firewall ports that will be added to the default and role-specific ports
+vault_custom_firewall_ports:
+  - { port: 9000, proto: tcp, rule: allow, comment: "Custom monitoring port" }
+  - { port: 8443, proto: tcp, rule: allow, comment: "Custom HTTPS admin panel" }
+  - { port: 1234, proto: udp, rule: allow, comment: "Custom UDP service" }
+
+# Define ports to explicitly deny (optional)
+custom_firewall_deny_ports:
+  - { port: 23, proto: tcp, rule: deny, comment: "Block Telnet" }
+  - { port: 135, proto: tcp, rule: deny, comment: "Block RPC" }
 
 # =============================================================================
 # GLOBAL SENSITIVE CONFIGURATION

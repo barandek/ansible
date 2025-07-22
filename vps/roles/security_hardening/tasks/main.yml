@@ -1,5 +1,10 @@
 
 ---
+- name: Set SSH key variables
+  set_fact:
+    expanded_ssh_key_dir: "{{ ssh_key_dir | expanduser }}"
+    ssh_key_name: "{{ inventory_hostname | regex_replace('[^a-zA-Z0-9._-]', '_') }}_{{ ansible_user }}_key"
+    
 - name: Create SSH banner
   copy:
     content: |
@@ -45,17 +50,6 @@
     state: started
     enabled: yes
 
-- name: Disable unused network protocols
-  lineinfile:
-    path: /etc/modprobe.d/blacklist-rare-network.conf
-    line: "{{ item }}"
-    create: yes
-  loop:
-    - "install dccp /bin/true"
-    - "install sctp /bin/true"
-    - "install rds /bin/true"
-    - "install tipc /bin/true"
-
 - name: Set up automatic security updates (Debian/Ubuntu)
   apt:
     name: unattended-upgrades
@@ -72,101 +66,80 @@
 # CRITICAL SAFETY CHECKS BEFORE DISABLING ROOT ACCESS
 # =============================================================================
 
-- name: Verify custom user exists
+- name: Verify user exists
   user:
-    name: "{{ custom_user }}"
+    name: "{{ ansible_user }}"
     state: present
   check_mode: yes
-  register: custom_user_check
+  register: user_check
   failed_when: false
 
-- name: Verify custom user has sudo access
-  command: sudo -l -U {{ custom_user }}
+- name: Verify user has sudo access
+  command: sudo -l -U {{ ansible_user }}
   register: sudo_check
   failed_when: false
   changed_when: false
 
-- name: Check if custom user SSH key is properly configured
+- name: Check if user SSH key is properly configured
   stat:
-    path: "/home/{{ custom_user }}/.ssh/authorized_keys"
+    path: "/home/{{ ansible_user }}/.ssh/authorized_keys"
   register: ssh_key_check
 
 - name: Verify SSH key content exists
-  command: cat /home/{{ custom_user }}/.ssh/authorized_keys
+  command: cat /home/{{ ansible_user }}/.ssh/authorized_keys
   register: ssh_key_content
   changed_when: false
   failed_when: false
 
-- name: Test SSH key authentication for custom user (CRITICAL SAFETY CHECK)
+- name: Test SSH key authentication for user
   become: no
-  command: ssh -i {{ expanded_ssh_key_dir }}/{{ custom_user_ssh_key_name }} -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o PubkeyAuthentication=yes {{ custom_user }}@{{ ansible_host }} "echo 'SSH verification successful'"
+  command: ssh -i {{ expanded_ssh_key_dir }}/{{ ssh_key_name }} -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o PubkeyAuthentication=yes {{ ansible_user }}@{{ ansible_host }} "echo 'SSH verification successful'"
   register: ssh_verification_test
-  ignore_errors: yes
+  ignore_errors: no
   delegate_to: localhost
   when: 
     - expanded_ssh_key_dir is defined
-    - custom_user_ssh_key_name is defined
+    - ssh_key_name is defined
 
-- name: Display safety check results
-  debug:
-    msg: |
-      === SAFETY CHECK RESULTS ===
-      Custom user exists: {{ 'YES' if custom_user_check.name is defined else 'NO' }}
-      Sudo access configured: {{ 'YES' if sudo_check.rc == 0 else 'NO' }}
-      SSH authorized_keys exists: {{ 'YES' if ssh_key_check.stat.exists else 'NO' }}
-      SSH key content present: {{ 'YES' if ssh_key_content.stdout | length > 0 else 'NO' }}
-      SSH key authentication test: {{ 'PASS' if ssh_verification_test.rc == 0 else 'FAIL' }}
-      Status: {{ 'SAFE TO DISABLE ROOT ACCESS' if (custom_user_check.name is defined and sudo_check.rc == 0 and ssh_key_check.stat.exists and ssh_key_content.stdout | length > 0) else 'NOT SAFE - KEEPING ROOT ACCESS ENABLED' }}
+# =============================================================================
+# KERNEL SECURITY HARDENING
+# =============================================================================
 
-- name: Set safety flag based on checks
-  set_fact:
-    safe_to_disable_root: "{{ 
-      custom_user_check.name is defined and 
-      sudo_check.rc == 0 and 
-      ssh_key_check.stat.exists and 
-      ssh_key_content.stdout | length > 0 and
-      (ssh_verification_test.rc == 0 if ssh_verification_test is defined else true)
-    }}"
-
-- name: Warning if not safe to disable root access
-  debug:
-    msg: |
-      WARNING: Safety checks failed!
-      Root password authentication will NOT be disabled.
-      Please verify:
-        1. Custom user '{{ custom_user }}' exists and has sudo access
-        2. SSH key is properly configured in authorized_keys
-        3. SSH key authentication works
-      You can manually disable root access later with:
-        sudo passwd -l root
-        sudo usermod -s /usr/sbin/nologin root
-  when: not safe_to_disable_root
-
-- name: Disable root password authentication (FINAL STEP - ONLY IF SAFE)
-  user:
-    name: root
-    password: "!"
-  when: 
-    - ansible_user == "root"
-    - safe_to_disable_root
-
-- name: Disable root shell access (ADDITIONAL SECURITY)
-  user:
-    name: root
-    shell: /usr/sbin/nologin
-  when: 
-    - ansible_user == "root"
-    - safe_to_disable_root
-    - disable_root_shell | default(true)
-
-- name: Display security hardening completion
-  debug:
-    msg: |
-      SSH hardening applied successfully
-      {{ 'Root password authentication disabled' if safe_to_disable_root else 'Root password authentication KEPT ENABLED (safety check failed)' }}
-      {{ 'Root shell access disabled' if safe_to_disable_root else 'Root shell access KEPT ENABLED (safety check failed)' }}
-      SSH password authentication disabled
-      Fail2ban intrusion prevention enabled
-      System security parameters configured
-      {{ 'IMPORTANT: Root access is now DISABLED' if safe_to_disable_root else 'IMPORTANT: Root access is still ENABLED' }}
-      {{ 'Use only SSH keys for authentication from now on' if safe_to_disable_root else 'Fix the issues above and manually disable root access' }}
+- name: Configure kernel parameters for security
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    # Enable IP forwarding - required for Docker to function properly
+    - { name: "net.ipv4.ip_forward", value: "1" }
+    
+    # Disable sending ICMP redirects (prevent routing-based attacks)
+    - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
+    
+    # Disable accepting ICMP redirects (prevent malicious routing table changes)
+    - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+    
+    # Disable accepting "secure" ICMP redirects (even from gateways in route table)
+    - { name: "net.ipv4.conf.all.secure_redirects", value: "0" }
+    - { name: "net.ipv4.conf.default.secure_redirects", value: "0" }
+    
+    # Ignore broadcast ICMP echo requests (prevent Smurf DDoS attacks)
+    - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    
+    # Ignore bogus ICMP error responses (reduce log spam from malformed packets)
+    - { name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
+    
+    # Log packets with impossible source addresses ("martian" packets)
+    - { name: "net.ipv4.conf.all.log_martians", value: "1" }
+    - { name: "net.ipv4.conf.default.log_martians", value: "1" }
+    
+    # Restrict access to kernel logs via dmesg (prevent info leakage)
+    - { name: "kernel.dmesg_restrict", value: "1" }
+    
+    # Hide kernel pointer addresses (prevent kernel exploitation)
+    - { name: "kernel.kptr_restrict", value: "2" }
+  tags: [security, kernel]

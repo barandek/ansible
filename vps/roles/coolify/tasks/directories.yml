@@ -1,0 +1,40 @@
+---
+# Create required directories for Coolify
+
+- name: Create base Coolify directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: 9999
+    group: root
+    mode: '0700'
+  loop:
+    - /data/coolify/source
+    - /data/coolify/ssh
+    - /data/coolify/applications
+    - /data/coolify/databases
+    - /data/coolify/backups
+    - /data/coolify/services
+    - /data/coolify/proxy
+    - /data/coolify/webhooks-during-maintenance
+
+- name: Create SSH directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: 9999
+    group: root
+    mode: '0700'
+  loop:
+    - /data/coolify/ssh/keys
+    - /data/coolify/ssh/mux
+
+- name: Create proxy directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: 9999
+    group: root
+    mode: '0700'
+  loop:
+    - /data/coolify/proxy/dynamic
