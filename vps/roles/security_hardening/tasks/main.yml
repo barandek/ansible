@@ -50,56 +50,15 @@
     state: started
     enabled: yes
 
-- name: Set up automatic security updates (Debian/Ubuntu)
-  apt:
-    name: unattended-upgrades
-    state: present
-  when: ansible_os_family == "Debian"
-
-- name: Configure automatic security updates (Debian/Ubuntu)
-  template:
-    src: 50unattended-upgrades.j2
-    dest: /etc/apt/apt.conf.d/50unattended-upgrades
-  when: ansible_os_family == "Debian"
-
 # =============================================================================
 # CRITICAL SAFETY CHECKS BEFORE DISABLING ROOT ACCESS
 # =============================================================================
-
-- name: Verify user exists
-  user:
-    name: "{{ ansible_user }}"
-    state: present
-  check_mode: yes
-  register: user_check
-  failed_when: false
 
 - name: Verify user has sudo access
   command: sudo -l -U {{ ansible_user }}
   register: sudo_check
   failed_when: false
   changed_when: false
-
-- name: Check if user SSH key is properly configured
-  stat:
-    path: "/home/{{ ansible_user }}/.ssh/authorized_keys"
-  register: ssh_key_check
-
-- name: Verify SSH key content exists
-  command: cat /home/{{ ansible_user }}/.ssh/authorized_keys
-  register: ssh_key_content
-  changed_when: false
-  failed_when: false
-
-- name: Test SSH key authentication for user
-  become: no
-  command: ssh -i {{ expanded_ssh_key_dir }}/{{ ssh_key_name }} -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o PubkeyAuthentication=yes {{ ansible_user }}@{{ ansible_host }} "echo 'SSH verification successful'"
-  register: ssh_verification_test
-  ignore_errors: no
-  delegate_to: localhost
-  when: 
-    - expanded_ssh_key_dir is defined
-    - ssh_key_name is defined
 
 # =============================================================================
 # KERNEL SECURITY HARDENING

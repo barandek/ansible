@@ -33,10 +33,10 @@
       tags: [users]
     - role: security_hardening
       tags: [security]
-    - role: firewall_setup
-      tags: [firewall]
     - role: docker_setup
       tags: [docker]
+    - role: firewall_setup
+      tags: [firewall]
       when: server_role in ['coolify'] # Only install Docker on web/app servers
     - role: coolify
       tags: [coolify]
