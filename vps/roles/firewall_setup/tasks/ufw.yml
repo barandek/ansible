@@ -42,12 +42,6 @@
     state: enabled
   when: "'Status: active' not in current_ufw_status.stdout"
 
-- name: Check if Docker is installed
-  command: docker --version
-  register: docker_check
-  changed_when: false
-  failed_when: false
-
 - name: Ensure UFW service is enabled and active
   systemd:
     name: ufw
@@ -102,8 +96,3 @@
       - UFW was {{ 'activated' if ufw_was_inactive else 'already active' }}
       - Policies were {{ 'updated' if ufw_policies_changed else 'already correct' }}
       - Rules applied idempotently (no unnecessary resets)
-      {% if docker_check.rc == 0 %}
-      - Docker detected: {{ 'Yes' }}
-      {% else %}
-      - Docker not detected: No Docker configuration needed
-      {% endif %}

@@ -18,38 +18,128 @@
     --env-file /data/coolify/source/.env 
     -f /data/coolify/source/docker-compose.yml 
     -f /data/coolify/source/docker-compose.prod.yml 
+    {% if coolify_disable_external_ports | default(false) %}
+    -f /data/coolify/source/docker-compose.custom.yml
+    {% endif %}
     --project-directory /data/coolify/source 
     config --quiet
   register: compose_validation
   failed_when: false
 
-- name: Display validation errors if any
-  debug:
+- name: Fail if Docker Compose validation failed
+  fail:
     msg: |
-      Docker Compose validation failed:
+      === DOCKER COMPOSE VALIDATION FAILED ===
+
+      Error details:
       {{ compose_validation.stderr }}
+
+      Common causes:
+      - Invalid YAML syntax in compose files
+      - Missing environment variables
+      - Invalid port configurations
+      - Network configuration issues
+
+      Please check your configuration and try again.
   when: compose_validation.rc != 0
 
-- name: Start Coolify services
+- name: Check if Coolify is already running
+  command: docker compose
+    --env-file /data/coolify/source/.env
+    -f /data/coolify/source/docker-compose.yml
+    -f /data/coolify/source/docker-compose.prod.yml
+    {% if coolify_disable_external_ports | default(false) %}
+    -f /data/coolify/source/docker-compose.custom.yml
+    {% endif %}
+    --project-directory /data/coolify/source
+    ps -q
+  register: coolify_running
+  changed_when: false
+  failed_when: false
+
+- name: Determine restart strategy
+  set_fact:
+    coolify_needs_restart: "{{ coolify_compose_changed | default(false) }}"
+    coolify_needs_force_recreate: "{{ not coolify_running.stdout or env_file_updated.changed | default(false) }}"
+
+- name: Display restart strategy
+  debug:
+    msg: |
+      === COOLIFY RESTART STRATEGY ===
+      Compose config changed: {{ coolify_compose_changed | default(false) }}
+      Environment file changed: {{ env_file_updated.changed | default(false) }}
+      Coolify running: {{ coolify_running.stdout | length > 0 }}
+
+      Strategy selected:
+      {% if coolify_needs_force_recreate %}
+      - FORCE RECREATE (first time or env changed)
+      {% elif coolify_needs_restart %}
+      - RESTART (compose config changed)
+      {% else %}
+      - NORMAL START (no changes detected)
+      {% endif %}
+
+- name: Start Coolify services (force recreate - first time or env changed)
   shell: >
     docker compose 
     --env-file /data/coolify/source/.env 
     -f /data/coolify/source/docker-compose.yml 
     -f /data/coolify/source/docker-compose.prod.yml 
+    {% if coolify_disable_external_ports | default(false) %}
+    -f /data/coolify/source/docker-compose.custom.yml 
+    {% endif %}
     --project-directory /data/coolify/source 
     up -d --pull always --remove-orphans --force-recreate
-  when: compose_validation.rc == 0
+  when:
+    - compose_validation.rc == 0
+    - coolify_needs_force_recreate
+  register: coolify_force_recreated
 
-- name: Fail if Docker Compose validation failed
-  fail:
-    msg: "Docker Compose configuration is invalid. Please check the error messages above."
-  when: compose_validation.rc != 0
+- name: Restart Coolify services (compose config changed)
+  shell: >
+    docker compose 
+    --env-file /data/coolify/source/.env 
+    -f /data/coolify/source/docker-compose.yml 
+    -f /data/coolify/source/docker-compose.prod.yml 
+    {% if coolify_disable_external_ports | default(false) %}
+    -f /data/coolify/source/docker-compose.custom.yml 
+    {% endif %}
+    --project-directory /data/coolify/source 
+    restart
+  when:
+    - compose_validation.rc == 0
+    - coolify_needs_restart
+    - not coolify_needs_force_recreate
+  register: coolify_restarted
 
-- name: Wait for Coolify to start
+- name: Start Coolify services (normal startup)
+  shell: >
+    docker compose 
+    --env-file /data/coolify/source/.env 
+    -f /data/coolify/source/docker-compose.yml 
+    -f /data/coolify/source/docker-compose.prod.yml 
+    {% if coolify_disable_external_ports | default(false) %}
+    -f /data/coolify/source/docker-compose.custom.yml 
+    {% endif %}
+    --project-directory /data/coolify/source 
+    up -d --pull always --remove-orphans
+  when:
+    - compose_validation.rc == 0
+    - not coolify_needs_restart
+    - not coolify_needs_force_recreate
+  register: coolify_normal_start
+
+- name: Determine if we need to wait for startup
+  set_fact:
+    coolify_needs_startup_wait: >-
+      {{
+        coolify_force_recreated.changed | default(false) or
+        coolify_restarted.changed | default(false) or
+        (coolify_normal_start.changed | default(false) and not coolify_running.stdout)
+      }}
+
+- name: Wait for Coolify to start (only when services were restarted/recreated)
   pause:
     seconds: 10
-
-- name: Check if Coolify is running
-  command: docker ps --filter "name=coolify"
-  register: coolify_status
-  changed_when: false
+    prompt: "Waiting for Coolify services to start up..."
+  when: coolify_needs_startup_wait
