@@ -31,11 +31,13 @@ ssh_client_alive_count_max: 2
 role_configs:
   coolify:
     min_cpu_cores: 2
-    min_memory_gb: 4
-    firewall_ports:
-      - { port: 8000, proto: tcp, rule: allow, comment: "Coolify dashboard HTTP"}
-      - { port: 6001, proto: tcp, rule: allow, comment: "Real-time communications"}
-      - { port: 6002, proto: tcp, rule: allow, comment: "Terminal access" }
+    min_memory_gb: 3
+    firewall_ports: >-
+      {{ [] if coolify_disable_external_ports | default(false) else [
+        { 'port': 8000, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Coolify dashboard HTTP'},
+        { 'port': 6001, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Real-time communications'},
+        { 'port': 6002, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Terminal access' }
+      ] }}
 
   database:
     min_cpu_cores: 4
@@ -43,15 +45,15 @@ role_configs:
     ssh_port: 2222 # Custom SSH port for database
     fail2ban_bantime: 7200 # Stricter security
     firewall_ports:
-      - { port: 5432, proto: tcp, rule: allow, comment: "PostgreSQL" }
-      - { port: 6379, proto: tcp, rule: allow, comment: "Redis" }
+      - { port: 5432, proto: 'tcp', rule: 'allow', comment: "PostgreSQL" }
+      - { port: 6379, proto: 'tcp', rule: 'allow', comment: "Redis" }
 
   webserver:
     min_cpu_cores: 2
     min_memory_gb: 4
     firewall_ports:
-      - { port: 8080, proto: tcp, rule: allow, comment: "Web application" }
-      - { port: 3000, proto: tcp, rule: allow, comment: "Node.js application" }
+      - { port: 8080, proto: 'tcp', rule: 'allow', comment: "Web application" }
+      - { port: 3000, proto: 'tcp', rule: 'allow', comment: "Node.js application" }
 
   minimal:
     min_cpu_cores: 1
@@ -67,9 +69,9 @@ current_role_config: "{{ role_configs[server_role] | default(role_configs.minima
 
 # Default recommended ports (can be overridden per role)
 default_allow_ports:
-  - { port: "{{ ssh_port }}", proto: tcp, rule: allow, comment: "SSH access" }
-  - { port: 80, proto: tcp, rule: allow, comment: "HTTP traffic" }
-  - { port: 443, proto: tcp, rule: allow, comment: "HTTPS traffic" }
+  - { port: "{{ ssh_port }}", proto: 'tcp', rule: 'allow', comment: "SSH access" }
+  - { port: 80, proto: 'tcp', rule: 'allow', comment: "HTTP traffic" }
+  - { port: 443, proto: 'tcp', rule: 'allow', comment: "HTTPS traffic" }
 
 # Role-specific ports (merged with defaults)
 role_specific_ports: "{{ current_role_config.firewall_ports | default([]) }}"
@@ -90,6 +92,13 @@ allowed_ssh_ips: []
 fail2ban_bantime: "{{ current_role_config.fail2ban_bantime | default(3600) }}"
 fail2ban_findtime: 600
 fail2ban_maxretry: 3
+
+# =============================================================================
+# COOLIFY CONFIGURATION
+# =============================================================================
+# Set to true to disable external port exposure (8000, 6001, 6002)
+# This creates a docker-compose.custom.yml file that resets port mappings
+coolify_disable_external_ports: true
 
 # =============================================================================
 # SYSTEM REQUIREMENTS (without quotes to preserve integer type)

@@ -1,8 +1,0 @@
----
-- name: restart docker
-  systemd:
-    name: docker
-    state: restarted
-    enabled: yes
-  when: ansible_service_mgr == "systemd"
-  # this task will only execute if the target host uses systemd as its service manager

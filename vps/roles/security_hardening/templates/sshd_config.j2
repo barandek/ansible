@@ -29,10 +29,13 @@ KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-
 
 # Disable unused features
 X11Forwarding no
-AllowTcpForwarding no
+AllowTcpForwarding yes
 AllowStreamLocalForwarding no
 GatewayPorts no
 PermitTunnel no
+
+# SFTP subsystem (required for SCP/SFTP)
+Subsystem sftp /usr/lib/openssh/sftp-server
 
 # Banner
 Banner /etc/ssh/banner

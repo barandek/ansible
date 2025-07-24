@@ -1,10 +1,6 @@
 ---
 # Display Coolify installation information
 
-- name: Set server IP address
-  set_fact:
-    server_ip: "{{ ansible_host }}"
-
 - name: Get Coolify container status
   shell: docker ps --filter "name=coolify" --format "{{ '{{.Names}} - {{.Status}}' }}"
   register: coolify_containers
@@ -16,7 +12,7 @@
       === COOLIFY INSTALLATION COMPLETE ===
 
       Access your Coolify dashboard at:
-      http:\\{{ server_ip }}:8000
+      http:\\{{ ansible_host }}:8000
 
       Running containers:
       {% for container in coolify_containers.stdout_lines %}

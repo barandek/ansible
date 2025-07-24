@@ -18,6 +18,7 @@ __pycache__/
 
 # Vault files
 vault.yml
+inventory.yml
 !vault.yml.example
 .vault_pass
 
