@@ -1,5 +1,18 @@
 ---
-# Start Coolify services
+# Start Coolify services - Refactored for DRY & KISS principles
+# Eliminates redundant docker compose commands and simplifies restart logic
+
+- name: Set Docker Compose base command
+  set_fact:
+    docker_compose_cmd: >-
+      docker compose
+      --env-file /data/coolify/source/.env
+      -f /data/coolify/source/docker-compose.yml
+      -f /data/coolify/source/docker-compose.prod.yml
+      {% if not expose_coolify_ports | default(false) %}
+      -f /data/coolify/source/docker-compose.custom.yml
+      {% endif %}
+      --project-directory /data/coolify/source
 
 - name: Create Coolify network
   community.docker.docker_network:
@@ -13,18 +26,10 @@
     append: yes
 
 - name: Validate Docker Compose configuration
-  shell: >
-    docker compose 
-    --env-file /data/coolify/source/.env 
-    -f /data/coolify/source/docker-compose.yml 
-    -f /data/coolify/source/docker-compose.prod.yml 
-    {% if coolify_disable_external_ports | default(false) %}
-    -f /data/coolify/source/docker-compose.custom.yml
-    {% endif %}
-    --project-directory /data/coolify/source 
-    config --quiet
+  shell: "{{ docker_compose_cmd }} config --quiet"
   register: compose_validation
   failed_when: false
+  changed_when: false
 
 - name: Fail if Docker Compose validation failed
   fail:
@@ -43,103 +48,45 @@
       Please check your configuration and try again.
   when: compose_validation.rc != 0
 
-- name: Check if Coolify is already running
-  command: docker compose
-    --env-file /data/coolify/source/.env
-    -f /data/coolify/source/docker-compose.yml
-    -f /data/coolify/source/docker-compose.prod.yml
-    {% if coolify_disable_external_ports | default(false) %}
-    -f /data/coolify/source/docker-compose.custom.yml
-    {% endif %}
-    --project-directory /data/coolify/source
-    ps -q
+- name: Check current Coolify state
+  shell: "{{ docker_compose_cmd }} ps -q"
   register: coolify_running
   changed_when: false
   failed_when: false
 
-- name: Determine restart strategy
+- name: Determine if services need update
   set_fact:
-    coolify_needs_restart: "{{ coolify_compose_changed | default(false) }}"
-    coolify_needs_force_recreate: "{{ not coolify_running.stdout or env_file_updated.changed | default(false) }}"
-
-- name: Display restart strategy
-  debug:
-    msg: |
-      === COOLIFY RESTART STRATEGY ===
-      Compose config changed: {{ coolify_compose_changed | default(false) }}
-      Environment file changed: {{ env_file_updated.changed | default(false) }}
-      Coolify running: {{ coolify_running.stdout | length > 0 }}
-
-      Strategy selected:
-      {% if coolify_needs_force_recreate %}
-      - FORCE RECREATE (first time or env changed)
-      {% elif coolify_needs_restart %}
-      - RESTART (compose config changed)
-      {% else %}
-      - NORMAL START (no changes detected)
-      {% endif %}
-
-- name: Start Coolify services (force recreate - first time or env changed)
-  shell: >
-    docker compose 
-    --env-file /data/coolify/source/.env 
-    -f /data/coolify/source/docker-compose.yml 
-    -f /data/coolify/source/docker-compose.prod.yml 
-    {% if coolify_disable_external_ports | default(false) %}
-    -f /data/coolify/source/docker-compose.custom.yml 
-    {% endif %}
-    --project-directory /data/coolify/source 
-    up -d --pull always --remove-orphans --force-recreate
-  when:
-    - compose_validation.rc == 0
-    - coolify_needs_force_recreate
-  register: coolify_force_recreated
-
-- name: Restart Coolify services (compose config changed)
-  shell: >
-    docker compose 
-    --env-file /data/coolify/source/.env 
-    -f /data/coolify/source/docker-compose.yml 
-    -f /data/coolify/source/docker-compose.prod.yml 
-    {% if coolify_disable_external_ports | default(false) %}
-    -f /data/coolify/source/docker-compose.custom.yml 
-    {% endif %}
-    --project-directory /data/coolify/source 
-    restart
-  when:
-    - compose_validation.rc == 0
-    - coolify_needs_restart
-    - not coolify_needs_force_recreate
-  register: coolify_restarted
-
-- name: Start Coolify services (normal startup)
-  shell: >
-    docker compose 
-    --env-file /data/coolify/source/.env 
-    -f /data/coolify/source/docker-compose.yml 
-    -f /data/coolify/source/docker-compose.prod.yml 
-    {% if coolify_disable_external_ports | default(false) %}
-    -f /data/coolify/source/docker-compose.custom.yml 
-    {% endif %}
-    --project-directory /data/coolify/source 
-    up -d --pull always --remove-orphans
-  when:
-    - compose_validation.rc == 0
-    - not coolify_needs_restart
-    - not coolify_needs_force_recreate
-  register: coolify_normal_start
-
-- name: Determine if we need to wait for startup
-  set_fact:
-    coolify_needs_startup_wait: >-
+    coolify_needs_update: >-
       {{
-        coolify_force_recreated.changed | default(false) or
-        coolify_restarted.changed | default(false) or
-        (coolify_normal_start.changed | default(false) and not coolify_running.stdout)
+        (coolify_compose_changed | default(false)) or
+        (env_file_updated.changed | default(false)) or
+        (coolify_running.stdout | length == 0)
       }}
 
-- name: Wait for Coolify to start (only when services were restarted/recreated)
+- name: Display update strategy
+  debug:
+    msg: |
+      === COOLIFY UPDATE STRATEGY ===
+      Compose config changed: {{ coolify_compose_changed | default(false) }}
+      Environment file changed: {{ env_file_updated.changed | default(false) }}
+      Services running: {{ coolify_running.stdout | length > 0 }}
+      
+      Action: {% if coolify_needs_update %}UPDATE/START SERVICES{% else %}NO CHANGES NEEDED{% endif %}
+
+- name: Update/Start Coolify services
+  shell: >
+    {{ docker_compose_cmd }}
+    up -d --pull always --remove-orphans
+    {% if coolify_compose_changed | default(false) or env_file_updated.changed | default(false) %}
+    --force-recreate
+    {% endif %}
+  when:
+    - compose_validation.rc == 0
+    - coolify_needs_update
+  register: coolify_updated
+
+- name: Wait for Coolify to start
   pause:
     seconds: 10
     prompt: "Waiting for Coolify services to start up..."
-  when: coolify_needs_startup_wait
+  when: coolify_updated.changed | default(false)

@@ -37,7 +37,7 @@
 
 - name: Set UFW firewall status (Debian/Ubuntu)
   set_fact:
-    firewall_status: "Service: {{ 'Active' if (ufw_active_check is defined and ufw_active_check.rc == 0) else 'Inactive' }})"
+    firewall_status: "Service: {{ 'Active' if (ufw_active_check is defined and ufw_active_check.rc == 0) else 'Inactive' }}"
   when: ansible_os_family in ["Debian"]
 
 - name: Display test results

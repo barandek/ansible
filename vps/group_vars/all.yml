@@ -27,17 +27,24 @@ ssh_client_alive_count_max: 2
 # =============================================================================
 # ROLE-BASED CONFIGURATION
 # =============================================================================
+# Feature flags (defined first to avoid circular references)
+expose_coolify_ports: false  # Override in inventory per-host if needed
+
+# Coolify firewall ports (conditional based on expose_coolify_ports)
+coolify_firewall_ports: >-
+  {{ [] if not expose_coolify_ports | default(false) else [
+    { 'port': 8000, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Coolify dashboard HTTP'},
+    { 'port': 6001, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Real-time communications'},
+    { 'port': 6002, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Terminal access' }
+  ] }}
+
 # Different configurations based on server role
 role_configs:
   coolify:
     min_cpu_cores: 2
     min_memory_gb: 3
-    firewall_ports: >-
-      {{ [] if coolify_disable_external_ports | default(false) else [
-        { 'port': 8000, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Coolify dashboard HTTP'},
-        { 'port': 6001, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Real-time communications'},
-        { 'port': 6002, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Terminal access' }
-      ] }}
+    expose_coolify_ports: "{{ expose_coolify_ports }}"  # Reference the feature flag
+    firewall_ports: "{{ coolify_firewall_ports }}"  # Reference pre-computed ports
 
   database:
     min_cpu_cores: 4
@@ -67,21 +74,23 @@ current_role_config: "{{ role_configs[server_role] | default(role_configs.minima
 # FIREWALL CONFIGURATION
 # =============================================================================
 
-# Default recommended ports (can be overridden per role)
+# Default recommended ports (always allowed)
 default_allow_ports:
   - { port: "{{ ssh_port }}", proto: 'tcp', rule: 'allow', comment: "SSH access" }
   - { port: 80, proto: 'tcp', rule: 'allow', comment: "HTTP traffic" }
   - { port: 443, proto: 'tcp', rule: 'allow', comment: "HTTPS traffic" }
 
 # Role-specific ports (merged with defaults)
+# Includes all role-specific firewall ports (database, webserver, coolify, etc.)
 role_specific_ports: "{{ current_role_config.firewall_ports | default([]) }}"
 
 # Custom ports (can be defined in vault or inventory)
 custom_firewall_ports: "{{ vault_custom_firewall_ports | default([]) }}"
 
-# Build final firewall rules
-firewall_allow_ports: "{{ default_allow_ports + role_specific_ports + custom_firewall_ports }}"
-firewall_deny_ports: "{{ custom_firewall_deny_ports | default([]) }}"
+# Build final firewall rules (single source of truth)
+# Combines: defaults + role-specific (from role_configs) + custom
+# Only includes rules that should be PRESENT (allowed)
+firewall_rules: "{{ default_allow_ports + role_specific_ports + custom_firewall_ports }}"
 
 # SSH Access Control (OPTIONAL - empty list allows all IPs)
 allowed_ssh_ips: []
@@ -92,13 +101,6 @@ allowed_ssh_ips: []
 fail2ban_bantime: "{{ current_role_config.fail2ban_bantime | default(3600) }}"
 fail2ban_findtime: 600
 fail2ban_maxretry: 3
-
-# =============================================================================
-# COOLIFY CONFIGURATION
-# =============================================================================
-# Set to true to disable external port exposure (8000, 6001, 6002)
-# This creates a docker-compose.custom.yml file that resets port mappings
-coolify_disable_external_ports: true
 
 # =============================================================================
 # SYSTEM REQUIREMENTS (without quotes to preserve integer type)

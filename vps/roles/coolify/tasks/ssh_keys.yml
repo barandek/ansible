@@ -23,6 +23,7 @@
   when: 
     - custom_key_exists.stat.exists
     - not coolify_ssh_key_exists.stat.exists
+  register: private_key_copied
 
 - name: Copy user's public key to Coolify (only if not exists)
   copy:
@@ -33,9 +34,10 @@
   when: 
     - custom_key_exists.stat.exists
     - not coolify_ssh_key_exists.stat.exists
+  register: public_key_copied
 
 - name: Display SSH key status
   debug:
     msg: |
-      SSH Keys: {{ 'Copied to Coolify' if (custom_key_exists.stat.exists and not coolify_ssh_key_exists.stat.exists) else 'Already exist in Coolify' }}
+      SSH Keys: {{ 'Copied to Coolify' if (private_key_copied.changed | default(false)) else 'Already exist in Coolify' }}
       Source: {{ expanded_ssh_key_dir }}/{{ ssh_key_name }}

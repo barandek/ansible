@@ -101,6 +101,7 @@
   delegate_to: localhost
   become: no
   ignore_errors: no
+  changed_when: false
 
 - name: Display setup summary
   debug:
