@@ -13,10 +13,13 @@ vault_hosts:
     ansible_user: "root"
     ansible_ssh_private_key_file: "/home/test/.ssh/vps_server_key"
     auth_method: "ssh_key"
-    server_role: "webserver"
+    server_role: "coolify"
     environment_name: "production"
     # ansible_become_pass: "SudoPassword123"  # Only needed if ansible_user is not root
 
+    # Optional: Override expose_coolify_ports per-host
+    # expose_coolify_ports: true  # Expose Coolify dashboard to public internet
+    
     # Optional: Additional secrets for this host
     # api_keys: "coolify_api_key_123"
     # ssl_cert_password: "ssl_password_456"
@@ -27,9 +30,6 @@ vault_hosts:
     ansible_user: "deploy"
     ansible_become_pass: "SecurePassword123"  # Used for both SSH and sudo
     auth_method: "password"
-    ansible_user: "deploy"
-    ansible_ssh_private_key_file: "/home/test/.ssh/deploy_key"
-    auth_method: "ssh_key"
     server_role: "webserver"
     environment_name: "production"
     
@@ -55,6 +55,14 @@ vault_hosts:
     environment_name: "staging"
 
 # =============================================================================
+# COOLIFY CONFIGURATION
+# =============================================================================
+# Global default: keep Coolify internal (not exposed to public internet)
+# Set to true to expose Coolify dashboard (ports 8000, 6001, 6002) to public
+# Can be overridden per-host in vault_hosts section
+expose_coolify_ports: false
+
+# =============================================================================
 # CUSTOM FIREWALL CONFIGURATION (OPTIONAL)
 # =============================================================================
 # Define custom firewall ports that will be added to the default and role-specific ports
@@ -74,6 +82,23 @@ custom_firewall_deny_ports:
 vault_global_secrets:
   backup_encryption_key: "GlobalBackupKey123"
   monitoring_api_key: "MonitoringAPIKey456"
+
+# =============================================================================
+# ROLE-BASED CONFIGURATION
+# =============================================================================
+# Each server role has specific firewall ports and requirements
+# Defined in group_vars/all.yml and can be overridden per-host
+#
+# Available roles:
+#   - coolify: Coolify deployment platform (min 2 CPU, 3GB RAM)
+#   - database: Database server (min 4 CPU, 8GB RAM, custom SSH port 2222)
+#   - webserver: Web application server (min 2 CPU, 4GB RAM)
+#   - minimal: Minimal server (min 1 CPU, 2GB RAM)
+#
+# Example: Override Coolify ports for a specific host
+#   vps-server:
+#     server_role: "coolify"
+#     expose_coolify_ports: true  # Expose dashboard to public internet
 
 # =============================================================================
 # ENVIRONMENT-SPECIFIC SECRETS

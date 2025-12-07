@@ -110,7 +110,7 @@
   set_fact:
     expected_custom_compose_content: |
       # Docker Compose override file to disable external port exposure
-      # This file is generated when coolify_disable_external_ports is set to true
+      # This file is generated when expose_coolify_ports is set to false
       # It uses the !reset tag to clear any previously defined port mappings
 
       services:
@@ -121,18 +121,18 @@
         soketi:
           # Disables external access to ports 6001 and 6002 (real-time communications and terminal)
           ports: !reset []
-  when: coolify_disable_external_ports | default(false)
+  when: not (expose_coolify_ports | default(false))
 
 - name: Calculate expected content checksum
   set_fact:
     expected_checksum: "{{ expected_custom_compose_content | hash('sha256') }}"
-  when: coolify_disable_external_ports | default(false)
+  when: not (expose_coolify_ports | default(false))
 
 - name: Determine if custom compose file needs update
   set_fact:
     custom_compose_needs_update: >-
       {{
-        coolify_disable_external_ports | default(false) and (
+        not (expose_coolify_ports | default(false)) and (
           not existing_custom_compose.stat.exists or
           existing_custom_compose.stat.checksum != expected_checksum
         )
@@ -151,7 +151,7 @@
   file:
     path: /data/coolify/source/docker-compose.custom.yml
     state: absent
-  when: not (coolify_disable_external_ports | default(false))
+  when: expose_coolify_ports | default(false)
   register: custom_compose_removed
 
 - name: Set fact if compose configuration changed
@@ -162,11 +162,11 @@
   debug:
     msg: |
       === DOCKER COMPOSE CUSTOM FILE STATUS ===
-      Disable external ports: {{ coolify_disable_external_ports | default(false) }}
+      Expose external ports: {{ expose_coolify_ports | default(false) }}
       File exists: {{ existing_custom_compose.stat.exists | default('N/A') }}
       Existing checksum: {{ existing_custom_compose.stat.checksum | default('N/A') }}
       Expected checksum: {{ expected_checksum | default('N/A') }}
       Needs update: {{ custom_compose_needs_update | default(false) }}
       File created/updated: {{ custom_compose_created.changed | default(false) }}
       File removed: {{ custom_compose_removed.changed | default(false) }}
-      Compose restart needed: {{ coolify_compose_changed }}
+      Compose restart needed: {{ coolify_compose_changed | default(false) }}

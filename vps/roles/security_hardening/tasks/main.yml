@@ -36,6 +36,7 @@
   command: sshd -t
   register: sshd_test
   failed_when: sshd_test.rc != 0
+  changed_when: false
 
 - name: Configure Fail2ban
   template:
@@ -70,7 +71,7 @@
     value: "{{ item.value }}"
     state: present
     reload: yes
-  loop:
+  loop:  
     # Enable IP forwarding - required for Docker to function properly
     - { name: "net.ipv4.ip_forward", value: "1" }
     

@@ -1,0 +1,21 @@
+---
+# Default firewall rules that apply to all hosts
+firewall_allow_ports:
+  - { port: "{{ ssh_port | default(22) }}", proto: 'tcp', rule: 'allow', comment: 'SSH' }
+
+# Deny all other ports by default
+firewall_deny_ports: []  # No specific ports to deny since default policy is deny
+
+# Rate limiting for SSH
+ssh_rate_limit: 30/m  # 30 connections per minute
+ssh_burst: 5  # Initial burst of connections
+
+# IP whitelist (empty means allow all, add trusted IPs as needed)
+# Example: ['192.168.1.0/24', '203.0.113.42']
+trusted_networks: []
+
+# Enable fail2ban
+enable_fail2ban: true
+fail2ban_bantime: 3600  # 1 hour
+fail2ban_findtime: 600  # 10 minutes
+fail2ban_maxretry: 5
