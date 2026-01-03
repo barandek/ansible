@@ -16,7 +16,6 @@
       - lsb-release
       - python3-pip
       - ufw
-      - fail2ban
     state: present
     update_cache: yes
 

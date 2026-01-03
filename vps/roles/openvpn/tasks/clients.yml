@@ -1,0 +1,77 @@
+---
+- name: Check existing certificates for active users
+  stat:
+    path: "{{ easyrsa_dir }}/pki/issued/{{ item.name }}.crt"
+  register: cert_stat
+  loop: "{{ openvpn_users | selectattr('state', 'equalto', 'active') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Generate client certificate requests for active users
+  shell: EASYRSA_BATCH=1 {{ easyrsa_binary }} gen-req {{ item.name }} nopass
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  environment:
+    EASYRSA_REQ_CN: "{{ item.name }}"
+  when: not (cert_stat.results | selectattr('item.name', 'equalto', item.name) | map(attribute='stat.exists') | first | default(false))
+  loop: "{{ openvpn_users | selectattr('state', 'equalto', 'active') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Sign client certificates for active users
+  shell: EASYRSA_BATCH=1 {{ easyrsa_binary }} sign-req client {{ item.name }}
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  when: not (cert_stat.results | selectattr('item.name', 'equalto', item.name) | map(attribute='stat.exists') | first | default(false))
+  loop: "{{ openvpn_users | selectattr('state', 'equalto', 'active') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Fetch CA certificate
+  slurp:
+    src: "{{ ca_cert_file }}"
+  register: ca_cert
+
+- name: Fetch client certificates
+  slurp:
+    src: "{{ easyrsa_dir }}/pki/issued/{{ item.name }}.crt"
+  register: client_cert
+  loop: "{{ openvpn_users | selectattr('state', 'equalto', 'active') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Fetch client private keys
+  slurp:
+    src: "{{ easyrsa_dir }}/pki/private/{{ item.name }}.key"
+  register: client_key
+  loop: "{{ openvpn_users | selectattr('state', 'equalto', 'active') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Fetch TLS authentication key
+  slurp:
+    src: "{{ ta_key_file }}"
+  register: tls_auth_key
+
+- name: Ensure client-configs directory exists
+  file:
+    path: "{{ client_cert_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Generate portable OpenVPN client files
+  template:
+    src: client.ovpn.j2
+    dest: "{{ client_cert_dir }}/{{ item.name }}.ovpn"
+    mode: '0600'
+    force: yes
+  loop: "{{ openvpn_users | selectattr('state', 'equalto', 'active') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    ca_cert_content: "{{ ca_cert.content | b64decode }}"
+    client_cert_content: >
+      {{ client_cert.results | selectattr('item.name', 'equalto', item.name) | map(attribute='content') | first | b64decode }}
+    client_key_content: >
+      {{ client_key.results | selectattr('item.name', 'equalto', item.name) | map(attribute='content') | first | b64decode }}
+    tls_auth_content: "{{ tls_auth_key.content | b64decode }}"

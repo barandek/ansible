@@ -7,7 +7,7 @@
 # HOST DEFINITIONS
 # =============================================================================
 vault_hosts:
-  # VPS Server (Coolify)
+  # VPS Server
   vps-server:
     ansible_host: "203.0.113.10"
     ansible_user: "root"
@@ -19,10 +19,6 @@ vault_hosts:
 
     # Optional: Override expose_coolify_ports per-host
     # expose_coolify_ports: true  # Expose Coolify dashboard to public internet
-    
-    # Optional: Additional secrets for this host
-    # api_keys: "coolify_api_key_123"
-    # ssl_cert_password: "ssl_password_456"
     
   # Web Server 01
   webserver01:
@@ -41,10 +37,8 @@ vault_hosts:
     auth_method: "password"
     server_role: "database"
     environment_name: "production"
-    # Database-specific secrets
-    db_root_password: "AnotherDbRootPass"
-    db_backup_password: "BackupPassword789"
-    
+    vault_openvpn_enabled: false
+
   # Application Server
   app-server:
     ansible_host: "203.0.113.50"
@@ -55,33 +49,22 @@ vault_hosts:
     environment_name: "staging"
 
 # =============================================================================
+# OPENVPN CONFIGURATION
+# =============================================================================
+vault_openvpn_enabled: true
+
+# =============================================================================
 # COOLIFY CONFIGURATION
 # =============================================================================
-# Global default: keep Coolify internal (not exposed to public internet)
-# Set to true to expose Coolify dashboard (ports 8000, 6001, 6002) to public
-# Can be overridden per-host in vault_hosts section
 expose_coolify_ports: false
 
 # =============================================================================
 # CUSTOM FIREWALL CONFIGURATION (OPTIONAL)
 # =============================================================================
-# Define custom firewall ports that will be added to the default and role-specific ports
 vault_custom_firewall_ports:
   - { port: 9000, proto: tcp, rule: allow, comment: "Custom monitoring port" }
   - { port: 8443, proto: tcp, rule: allow, comment: "Custom HTTPS admin panel" }
   - { port: 1234, proto: udp, rule: allow, comment: "Custom UDP service" }
-
-# Define ports to explicitly deny (optional)
-custom_firewall_deny_ports:
-  - { port: 23, proto: tcp, rule: deny, comment: "Block Telnet" }
-  - { port: 135, proto: tcp, rule: deny, comment: "Block RPC" }
-
-# =============================================================================
-# GLOBAL SENSITIVE CONFIGURATION
-# =============================================================================
-vault_global_secrets:
-  backup_encryption_key: "GlobalBackupKey123"
-  monitoring_api_key: "MonitoringAPIKey456"
 
 # =============================================================================
 # ROLE-BASED CONFIGURATION
@@ -94,20 +77,3 @@ vault_global_secrets:
 #   - database: Database server (min 4 CPU, 8GB RAM, custom SSH port 2222)
 #   - webserver: Web application server (min 2 CPU, 4GB RAM)
 #   - minimal: Minimal server (min 1 CPU, 2GB RAM)
-#
-# Example: Override Coolify ports for a specific host
-#   vps-server:
-#     server_role: "coolify"
-#     expose_coolify_ports: true  # Expose dashboard to public internet
-
-# =============================================================================
-# ENVIRONMENT-SPECIFIC SECRETS
-# =============================================================================
-vault_environment_secrets:
-  production:
-    database_url: "postgresql://prod_user:prod_pass@prod-db:5432/prod_db"
-    redis_password: "prod_redis_pass_123"
-    
-  staging:
-    database_url: "postgresql://stage_user:stage_pass@stage-db:5432/stage_db"
-    redis_password: "stage_redis_pass_456"

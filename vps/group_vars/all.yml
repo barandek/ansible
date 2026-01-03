@@ -14,6 +14,18 @@
 # - ansible_ssh_private_key_file (from vault)
 
 # =============================================================================
+# OPENVPN CONFIGURATION
+# =============================================================================
+
+# OpenVPN split-tunnel configuration
+openvpn_enabled: "{{ vault_openvpn_enabled | default(false) }}"
+openvpn_port: 1194
+openvpn_protocol: udp
+openvpn_server_network: "10.8.0.0"
+openvpn_server_netmask: "255.255.255.0"
+openvpn_clients: ['laptop', 'phone']
+
+# =============================================================================
 # SSH CONFIGURATION
 # =============================================================================
 ssh_key_dir: "~/.ssh"
@@ -91,9 +103,6 @@ custom_firewall_ports: "{{ vault_custom_firewall_ports | default([]) }}"
 # Combines: defaults + role-specific (from role_configs) + custom
 # Only includes rules that should be PRESENT (allowed)
 firewall_rules: "{{ default_allow_ports + role_specific_ports + custom_firewall_ports }}"
-
-# SSH Access Control (OPTIONAL - empty list allows all IPs)
-allowed_ssh_ips: []
 
 # =============================================================================
 # SECURITY CONFIGURATION

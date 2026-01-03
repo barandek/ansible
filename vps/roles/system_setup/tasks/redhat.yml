@@ -1,0 +1,86 @@
+---
+- name: Install EPEL repository (RedHat/CentOS/RHEL)
+  dnf:
+    name: epel-release
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Update package cache after EPEL installation (RedHat/CentOS/RHEL)
+  dnf:
+    update_cache: yes
+    update_only: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Update critical system packages (RedHat/CentOS/RHEL)
+  dnf:
+    name:
+      - openssl
+      - openssl-libs
+      - openssh-server
+      - openssh-clients
+      - curl
+      - wget
+      - python3
+    state: latest
+  when: ansible_os_family == "RedHat"
+
+- name: Install essential packages (RedHat/CentOS/RHEL)
+  dnf:
+    name:
+      - curl
+      - wget
+      - git
+      - vim
+      - unzip
+      - python3-pip
+      - firewalld
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Update SSH to match current OpenSSL version (prevent version mismatch)
+  dnf:
+    name: openssh-server
+    state: latest
+  when: ansible_os_family == "RedHat"
+  register: ssh_update_result
+
+- name: Restart SSH service to apply OpenSSL updates
+  systemd:
+    name: sshd
+    state: restarted
+  when: ansible_os_family == "RedHat" and ssh_update_result.changed
+
+- name: Ensure SSH service is enabled
+  systemd:
+    name: sshd
+    enabled: yes
+    state: started
+  when: ansible_os_family == "RedHat"
+
+- name: Install htop from EPEL (RedHat/CentOS/RHEL)
+  dnf:
+    name: htop
+    state: present
+  when: ansible_os_family == "RedHat"
+  ignore_errors: yes
+
+- name: Set up automatic security updates (RedHat/CentOS/RHEL)
+  dnf:
+    name: dnf-automatic
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Enable automatic security updates service (RedHat/CentOS/RHEL)
+  systemd:
+    name: dnf-automatic.timer
+    enabled: yes
+    state: started
+  when: ansible_os_family == "RedHat"
+
+- name: Configure automatic security updates (RedHat/CentOS/RHEL)
+  lineinfile:
+    path: /etc/dnf/automatic.conf
+    regexp: '^apply_updates'
+    line: 'apply_updates = yes'
+  when: ansible_os_family == "RedHat"

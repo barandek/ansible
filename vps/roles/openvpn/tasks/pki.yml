@@ -1,0 +1,111 @@
+---
+- name: Create Easy-RSA directory
+  file:
+    path: "{{ easyrsa_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Find Easy-RSA source version
+  shell: ls -1 {{ easy_rsa_source }} | grep -E '^[0-9]' | head -1
+  register: easyrsa_source_version
+  changed_when: false
+
+- name: Set Easy-RSA version fact
+  set_fact:
+    easyrsa_version: "{{ easyrsa_source_version.stdout }}"
+
+- name: Check if Easy-RSA version directory exists
+  stat:
+    path: "{{ easyrsa_dir }}/{{ easyrsa_version }}"
+  register: easyrsa_version_stat
+
+- name: Copy Easy-RSA files
+  copy:
+    src: "{{ easy_rsa_source }}/"
+    dest: "{{ easyrsa_dir }}/"
+    remote_src: yes
+  when: not easyrsa_version_stat.stat.exists
+
+- name: Find Easy-RSA version directory
+  shell: ls -d {{ easyrsa_dir }}/*/easyrsa 2>/dev/null | head -1
+  register: easyrsa_binary_path
+  changed_when: false
+
+- name: Set Easy-RSA binary path fact
+  set_fact:
+    easyrsa_binary: "{{ easyrsa_binary_path.stdout }}"
+
+- name: Check if PKI directory exists
+  stat:
+    path: "{{ easyrsa_dir }}/pki"
+  register: pki_dir_stat
+
+- name: Initialize Easy-RSA
+  command: "{{ easyrsa_binary }} init-pki"
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  when: not pki_dir_stat.stat.exists
+
+- name: Check if CA file exists
+  stat:
+    path: "{{ ca_cert_file }}"
+  register: ca_file_stat
+
+- name: Build the CA
+  shell: EASYRSA_BATCH=1 {{ easyrsa_binary }} build-ca nopass
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  environment:
+    EASYRSA_REQ_CN: "{{ ca_common_name }}"
+  when: not ca_file_stat.stat.exists
+
+- name: Check if server private key exists
+  stat:
+    path: "{{ server_key_file }}"
+  register: server_key_stat
+
+- name: Generate server certificate request
+  shell: EASYRSA_BATCH=1 {{ easyrsa_binary }} gen-req {{ openvpn_server_name }} nopass
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  environment:
+    EASYRSA_REQ_CN: "{{ openvpn_server_name }}"
+  when: not server_key_stat.stat.exists
+
+- name: Check if server certificate exists
+  stat:
+    path: "{{ server_cert_file }}"
+  register: server_cert_stat
+
+- name: Sign server certificate
+  shell: EASYRSA_BATCH=1 {{ easyrsa_binary }} sign-req server {{ openvpn_server_name }}
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  when: not server_cert_stat.stat.exists
+
+- name: Check if DH parameters exist
+  stat:
+    path: "{{ dh_param_file }}"
+  register: dh_stat
+
+- name: Generate Diffie-Hellman parameters
+  command: "{{ easyrsa_binary }} gen-dh"
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  when: not dh_stat.stat.exists
+
+- name: Check if TLS key exists
+  stat:
+    path: "{{ ta_key_file }}"
+  register: ta_key_stat
+
+- name: Generate TLS authentication key
+  command: "openvpn --genkey --secret {{ ta_key_file }}"
+  when: not ta_key_stat.stat.exists
+
+- name: Set permissions on TLS auth key
+  file:
+    path: "{{ ta_key_file }}"
+    mode: '0644'
+    owner: root
+    group: root

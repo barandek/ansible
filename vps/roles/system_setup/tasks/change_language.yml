@@ -1,16 +1,24 @@
 
 ---
 
-- name: Install locales package
+- name: Install locales package (Debian/Ubuntu)
   apt:
     name: locales
     state: present
     update_cache: yes
+  when: ansible_os_family == "Debian"
 
-- name: Generate English locale
+- name: Install glibc-langpack-english (RedHat/CentOS/RHEL)
+  dnf:
+    name: glibc-langpack-en
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Generate English locale (Debian/Ubuntu)
   locale_gen:
     name: en_US.UTF-8
     state: present
+  when: ansible_os_family == "Debian"
 
 - name: Set system locale to English
   copy:
@@ -20,7 +28,18 @@
       LC_ALL=en_US.UTF-8
     dest: /etc/default/locale
     mode: '0644'
+  when: ansible_os_family == "Debian"
   notify: update locale
+
+- name: Set system locale to English (RedHat/CentOS/RHEL)
+  copy:
+    content: |
+      LANG=en_US.UTF-8
+      LANGUAGE=en_US:en
+      LC_ALL=en_US.UTF-8
+    dest: /etc/locale.conf
+    mode: '0644'
+  when: ansible_os_family == "RedHat"
 
 - name: Set locale environment variables
   lineinfile:
@@ -43,12 +62,20 @@
     dest: /etc/profile.d/locale.sh
     mode: '0644'
 
-- name: Update locale for current session
+- name: Update locale for current session (Debian/Ubuntu)
   shell: |
     update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
     localectl set-locale LANG=en_US.UTF-8
   changed_when: false
   ignore_errors: yes
+  when: ansible_os_family == "Debian"
+
+- name: Update locale for current session (RedHat/CentOS/RHEL)
+  shell: |
+    localectl set-locale LANG=en_US.UTF-8
+  changed_when: false
+  ignore_errors: yes
+  when: ansible_os_family == "RedHat"
 
 - name: Display locale configuration status
   debug:

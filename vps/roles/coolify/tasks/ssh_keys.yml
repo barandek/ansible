@@ -8,14 +8,38 @@
   delegate_to: localhost
   become: no
 
+- name: Ensure Coolify SSH keys directory exists
+  file:
+    path: /data/coolify/ssh/keys
+    state: directory
+    mode: "0700"
+
 - name: Check if Coolify SSH keys already exist
   stat:
     path: /data/coolify/ssh/keys/id.root@host.docker.internal
   register: coolify_ssh_key_exists
 
+- name: Read user's private key content
+  slurp:
+    src: "{{ expanded_ssh_key_dir }}/{{ ssh_key_name }}"
+  register: private_key_content
+  delegate_to: localhost
+  become: no
+  when: 
+    - custom_key_exists.stat.exists
+    - not coolify_ssh_key_exists.stat.exists
+
+- name: Read user's public key content
+  slurp:
+    src: "{{ expanded_ssh_key_dir }}/{{ ssh_key_name }}.pub"
+  register: public_key_content
+  delegate_to: localhost
+  become: no
+  when: custom_key_exists.stat.exists
+
 - name: Copy user's private key to Coolify (only if not exists)
   copy:
-    src: "{{ expanded_ssh_key_dir }}/{{ ssh_key_name }}"
+    content: "{{ private_key_content.content | b64decode }}"
     dest: /data/coolify/ssh/keys/id.root@host.docker.internal
     owner: 9999
     group: root
@@ -27,7 +51,7 @@
 
 - name: Copy user's public key to Coolify (only if not exists)
   copy:
-    src: "{{ expanded_ssh_key_dir }}/{{ ssh_key_name }}.pub"
+    content: "{{ public_key_content.content | b64decode }}"
     dest: /data/coolify/ssh/keys/id.root@host.docker.internal.pub
     group: root
     mode: "0644"
@@ -36,8 +60,19 @@
     - not coolify_ssh_key_exists.stat.exists
   register: public_key_copied
 
+- name: Add Coolify's public key to root's authorized_keys
+  authorized_key:
+    user: root
+    key: "{{ public_key_content.content | b64decode }}"
+    state: present
+    comment: "Coolify deployment key"
+  when: 
+    - custom_key_exists.stat.exists
+    - public_key_content is defined
+
 - name: Display SSH key status
   debug:
     msg: |
       SSH Keys: {{ 'Copied to Coolify' if (private_key_copied.changed | default(false)) else 'Already exist in Coolify' }}
       Source: {{ expanded_ssh_key_dir }}/{{ ssh_key_name }}
+      Authorized: Public key added to root's authorized_keys for SCP access

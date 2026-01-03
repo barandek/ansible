@@ -1,55 +1,38 @@
 ---
-# Start Coolify services - Refactored for DRY & KISS principles
-# Eliminates redundant docker compose commands and simplifies restart logic
+# Start Coolify services
+# Unified approach for Docker
 
-- name: Set Docker Compose base command
+- name: Create Coolify network
+  shell: docker network create coolify --attachable
+  register: network_created
+  failed_when: network_created.rc != 0 and "already exists" not in network_created.stderr
+  changed_when: network_created.rc == 0
+
+- name: Build compose command
   set_fact:
-    docker_compose_cmd: >-
+    compose_cmd: >-
       docker compose
       --env-file /data/coolify/source/.env
       -f /data/coolify/source/docker-compose.yml
       -f /data/coolify/source/docker-compose.prod.yml
-      {% if not expose_coolify_ports | default(false) %}
-      -f /data/coolify/source/docker-compose.custom.yml
-      {% endif %}
+      {{ '' if (expose_coolify_ports | default(false)) else '-f /data/coolify/source/docker-compose.custom.yml' }}
       --project-directory /data/coolify/source
 
-- name: Create Coolify network
-  community.docker.docker_network:
-    name: coolify
-    attachable: true
-
-- name: Ensure deploy user has access to Docker socket
-  user:
-    name: "{{ ansible_user }}"
-    groups: docker
-    append: yes
-
-- name: Validate Docker Compose configuration
-  shell: "{{ docker_compose_cmd }} config --quiet"
+- name: Validate compose configuration
+  shell: "{{ compose_cmd }} config --quiet"
   register: compose_validation
-  failed_when: false
+  failed_when: compose_validation.rc != 0
   changed_when: false
 
-- name: Fail if Docker Compose validation failed
+- name: Fail if compose validation failed
   fail:
     msg: |
-      === DOCKER COMPOSE VALIDATION FAILED ===
-
-      Error details:
-      {{ compose_validation.stderr }}
-
-      Common causes:
-      - Invalid YAML syntax in compose files
-      - Missing environment variables
-      - Invalid port configurations
-      - Network configuration issues
-
-      Please check your configuration and try again.
+      === COMPOSE VALIDATION FAILED ===
+      {{ compose_validation.stderr | default('Unknown error') }}
   when: compose_validation.rc != 0
 
 - name: Check current Coolify state
-  shell: "{{ docker_compose_cmd }} ps -q"
+  shell: "{{ compose_cmd }} ps -q"
   register: coolify_running
   changed_when: false
   failed_when: false
@@ -59,34 +42,19 @@
     coolify_needs_update: >-
       {{
         (coolify_compose_changed | default(false)) or
-        (env_file_updated.changed | default(false)) or
         (coolify_running.stdout | length == 0)
       }}
 
-- name: Display update strategy
-  debug:
-    msg: |
-      === COOLIFY UPDATE STRATEGY ===
-      Compose config changed: {{ coolify_compose_changed | default(false) }}
-      Environment file changed: {{ env_file_updated.changed | default(false) }}
-      Services running: {{ coolify_running.stdout | length > 0 }}
-      
-      Action: {% if coolify_needs_update %}UPDATE/START SERVICES{% else %}NO CHANGES NEEDED{% endif %}
-
-- name: Update/Start Coolify services
-  shell: >
-    {{ docker_compose_cmd }}
-    up -d --pull always --remove-orphans
-    {% if coolify_compose_changed | default(false) or env_file_updated.changed | default(false) %}
-    --force-recreate
-    {% endif %}
-  when:
-    - compose_validation.rc == 0
-    - coolify_needs_update
-  register: coolify_updated
+- name: Start Coolify services
+  shell: |
+    {{ compose_cmd }} up -d {{ '--force-recreate' if (coolify_compose_changed | default(false)) else '' }} --remove-orphans
+  args:
+    chdir: /data/coolify/source
+  when: coolify_needs_update
+  register: coolify_started
 
 - name: Wait for Coolify to start
   pause:
     seconds: 10
     prompt: "Waiting for Coolify services to start up..."
-  when: coolify_updated.changed | default(false)
+  when: coolify_started.changed | default(false)

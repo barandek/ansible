@@ -1,0 +1,9 @@
+---
+- name: restart openvpn
+  systemd:
+    name: openvpn-server@server
+    state: restarted
+
+- name: reload ufw
+  ufw:
+    state: reloaded
