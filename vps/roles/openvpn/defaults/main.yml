@@ -1,0 +1,31 @@
+---
+# OpenVPN Users - convert from group_vars list to user objects
+openvpn_users: "{{ openvpn_clients | map('regex_replace', '^(.*)$', '{\"name\": \"\\1\", \"state\": \"active\"}') | map('from_json') | list }}"
+
+# Certificate Authority
+ca_common_name: "VPN-CA"
+
+# Server settings (from group_vars)
+openvpn_server_address: "{{ ansible_host }}"
+openvpn_proto: "{{ openvpn_protocol }}"
+openvpn_network: "{{ openvpn_server_network }}"
+openvpn_netmask: "{{ openvpn_server_netmask }}"
+openvpn_server_name: "server"
+openvpn_service_name: "{% if ansible_os_family == 'RedHat' %}openvpn-server@server{% else %}openvpn@server{% endif %}"
+
+# Directories
+easyrsa_dir: "/etc/openvpn/easy-rsa"
+easy_rsa_source: "/usr/share/easy-rsa"
+client_cert_dir: "/etc/openvpn/client-configs"
+openvpn_config_dir: "/etc/openvpn"
+
+# File paths
+dh_param_file: "{{ easyrsa_dir }}/pki/dh.pem"
+ca_cert_file: "{{ easyrsa_dir }}/pki/ca.crt"
+server_cert_file: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_server_name }}.crt"
+server_key_file: "{{ easyrsa_dir }}/pki/private/{{ openvpn_server_name }}.key"
+ta_key_file: "{{ easyrsa_dir }}/ta.key"
+
+# Logs
+log_file: "/var/log/openvpn/openvpn.log"
+status_file: "/var/log/openvpn/openvpn-status.log"

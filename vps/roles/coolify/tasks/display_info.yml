@@ -1,51 +1,32 @@
 ---
-# Display Coolify installation information
-
 - name: Get Coolify container status
-  shell: docker ps --filter "name=coolify" --format "{{ '{{.Names}} - {{.Status}}' }}"
+  shell: docker ps --filter 'name=coolify' --format '{{ '{{' }}.Names{{ '}}' }} - {{ '{{' }}.Status{{ '}}' }}'
   register: coolify_containers
   changed_when: false
+  failed_when: false
 
 - name: Display Coolify installation information
   debug:
     msg: |
       === COOLIFY INSTALLATION COMPLETE ===
 
-      Access your Coolify dashboard at:
-      http:\\{{ ansible_host }}:8000
+      Dashboard: http://{{ ansible_host }}:8000
 
       Running containers:
       {% for container in coolify_containers.stdout_lines %}
       - {{ container }}
       {% endfor %}
 
-      Important directories:
-      - Configuration: /data/coolify/source
-      - Applications: /data/coolify/applications
-      - Databases: /data/coolify/databases
+      Directories:
+      - Config: /data/coolify/source
+      - Apps: /data/coolify/applications
+      - DBs: /data/coolify/databases
       - Backups: /data/coolify/backups
 
-      User Configuration:
-      - Using existing deploy user: {{ ansible_user }}
-      - SSH key integrated with Coolify
-      - User has Docker access for Coolify management
+      Credentials: {{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify/.env
 
-      Credentials:
-      - Backup stored at: {{ playbook_dir }}/.credentials/{{ inventory_hostname }}/coolify/.env
-      - IMPORTANT: Credentials are excluded from git via .gitignore
+      Commands:
+      - Logs: docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml logs -f
+      - Restart: docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml restart
 
-      Management Commands (as {{ ansible_user }}):
-      - View Coolify logs: 
-          docker compose \
-          --env-file /data/coolify/source/.env \
-          -f /data/coolify/source/docker-compose.yml \
-          -f /data/coolify/source/docker-compose.prod.yml \
-          --project-directory /data/coolify/source logs -f
-      - Restart Coolify: 
-          docker compose \
-          --env-file /data/coolify/source/.env \
-          -f /data/coolify/source/docker-compose.yml \
-          -f /data/coolify/source/docker-compose.prod.yml \
-          --project-directory /data/coolify/source restart
-
-      For more information, visit: https:\\coolify.io/docs
+      Docs: https://coolify.io/docs

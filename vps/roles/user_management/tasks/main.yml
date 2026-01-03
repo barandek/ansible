@@ -52,7 +52,7 @@
 - name: Add user to required groups (without modifying other attributes)
   user:
     name: "{{ ansible_user }}"
-    groups: sudo,root,coolify
+    groups: "{{ 'wheel,root,coolify' if ansible_os_family == 'RedHat' else 'sudo,root,coolify' }}"
     append: yes
     # No shell, password, or other attributes specified to preserve existing values
 
@@ -93,6 +93,15 @@
             create: yes
             mode: "0440"
             validate: "visudo -cf %s"
+
+        - name: Ensure wheel group has sudo privileges (RedHat/CentOS/RHEL)
+          lineinfile:
+            path: /etc/sudoers.d/wheel
+            line: "%wheel ALL=(ALL) NOPASSWD:ALL"
+            create: yes
+            mode: "0440"
+            validate: "visudo -cf %s"
+          when: ansible_os_family == "RedHat"
 
 # Verification
 - name: Test SSH connectivity

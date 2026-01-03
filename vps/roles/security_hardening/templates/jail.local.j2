@@ -9,6 +9,8 @@ backend = systemd
 enabled = true
 port = {{ ssh_port }}
 filter = sshd
-logpath = /var/log/auth.log
-maxretry = {{ fail2ban_maxretry }}
+logpath = {{ '/var/log/auth.log' if ansible_os_family == "Debian" else '/var/log/secure' }}
+
+findtime = 1800
+maxretry = 10
 bantime = {{ fail2ban_bantime }}

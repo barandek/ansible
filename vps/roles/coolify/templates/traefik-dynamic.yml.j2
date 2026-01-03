@@ -1,0 +1,41 @@
+---
+# Dynamic Traefik configuration for service routing
+
+http:
+  middlewares:
+    # Security headers
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: no-referrer-when-downgrade
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+    
+    # Rate limiting for public services
+    rate-limit-public:
+      rateLimit:
+        average: 100
+        period: 1m
+        burst: 50
+    
+    # More relaxed rate limit for private services
+    rate-limit-private:
+      rateLimit:
+        average: 200
+        period: 1m
+        burst: 100
+
+  routers: {}
+  services: {}
+
+tcp:
+  routers: {}
+  services: {}
+
+udp:
+  routers: {}
+  services: {}

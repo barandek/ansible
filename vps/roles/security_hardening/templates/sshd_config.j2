@@ -35,7 +35,11 @@ GatewayPorts no
 PermitTunnel no
 
 # SFTP subsystem (required for SCP/SFTP)
+{% if ansible_os_family == "RedHat" %}
+Subsystem sftp /usr/libexec/openssh/sftp-server
+{% else %}
 Subsystem sftp /usr/lib/openssh/sftp-server
+{% endif %}
 
 # Banner
 Banner /etc/ssh/banner

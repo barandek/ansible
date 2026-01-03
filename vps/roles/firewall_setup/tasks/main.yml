@@ -2,3 +2,7 @@
 - name: Configure UFW firewall (Debian/Ubuntu)
   include_tasks: ufw.yml
   when: ansible_os_family in ["Debian"]
+
+- name: Configure firewalld (RedHat/CentOS/RHEL)
+  include_tasks: firewalld.yml
+  when: ansible_os_family in ["RedHat"]

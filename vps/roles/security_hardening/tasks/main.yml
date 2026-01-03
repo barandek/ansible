@@ -1,10 +1,24 @@
-
 ---
 - name: Set SSH key variables
   set_fact:
     expanded_ssh_key_dir: "{{ ssh_key_dir | expanduser }}"
     ssh_key_name: "{{ inventory_hostname | regex_replace('[^a-zA-Z0-9._-]', '_') }}_{{ ansible_user }}_key"
     
+- name: Check if sshd_config exists and is not empty
+  stat:
+    path: /etc/ssh/sshd_config
+  register: sshd_config_stat
+
+- name: Restore default sshd_config if missing or empty (RedHat)
+  copy:
+    src: /usr/share/openssh/sshd_config
+    dest: /etc/ssh/sshd_config
+    remote_src: yes
+    mode: '0600'
+  when: 
+    - ansible_os_family == "RedHat"
+    - not sshd_config_stat.stat.exists or sshd_config_stat.stat.size == 0
+
 - name: Create SSH banner
   copy:
     content: |
@@ -23,6 +37,7 @@
     dest: /etc/ssh/sshd_config.backup
     remote_src: yes
     backup: yes
+  when: sshd_config_stat.stat.exists and sshd_config_stat.stat.size > 0
 
 - name: Configure SSH hardening (AFTER user creation)
   template:
@@ -30,13 +45,53 @@
     dest: /etc/ssh/sshd_config
     backup: yes
     mode: '0600'
-  notify: restart ssh
+  register: ssh_config_changed
 
 - name: Validate SSH configuration
   command: sshd -t
   register: sshd_test
   failed_when: sshd_test.rc != 0
   changed_when: false
+
+- name: Restart SSH service immediately if config changed
+  systemd:
+    name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+    state: restarted
+  when: ssh_config_changed.changed
+
+- name: Verify SFTP subsystem is working
+  shell: |
+    if [ -f /usr/libexec/openssh/sftp-server ]; then
+      echo "SFTP server found at /usr/libexec/openssh/sftp-server"
+      exit 0
+    elif [ -f /usr/lib/openssh/sftp-server ]; then
+      echo "SFTP server found at /usr/lib/openssh/sftp-server"
+      exit 0
+    else
+      echo "ERROR: SFTP server not found"
+      exit 1
+    fi
+  register: sftp_check
+  changed_when: false
+  when: ansible_os_family == "RedHat"
+
+- name: Display SFTP verification result
+  debug:
+    msg: "{{ sftp_check.stdout }}"
+  when: ansible_os_family == "RedHat"
+
+- name: Install Fail2ban (RedHat)
+  package:
+    name: fail2ban
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install Fail2ban (Debian)
+  apt:
+    name: fail2ban
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
 
 - name: Configure Fail2ban
   template:
@@ -71,35 +126,47 @@
     value: "{{ item.value }}"
     state: present
     reload: yes
-  loop:  
-    # Enable IP forwarding - required for Docker to function properly
-    - { name: "net.ipv4.ip_forward", value: "1" }
-    
-    # Disable sending ICMP redirects (prevent routing-based attacks)
-    - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
-    - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
-    
-    # Disable accepting ICMP redirects (prevent malicious routing table changes)
-    - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
-    - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
-    
-    # Disable accepting "secure" ICMP redirects (even from gateways in route table)
-    - { name: "net.ipv4.conf.all.secure_redirects", value: "0" }
-    - { name: "net.ipv4.conf.default.secure_redirects", value: "0" }
-    
-    # Ignore broadcast ICMP echo requests (prevent Smurf DDoS attacks)
-    - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
-    
-    # Ignore bogus ICMP error responses (reduce log spam from malformed packets)
-    - { name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
-    
-    # Log packets with impossible source addresses ("martian" packets)
-    - { name: "net.ipv4.conf.all.log_martians", value: "1" }
-    - { name: "net.ipv4.conf.default.log_martians", value: "1" }
-    
-    # Restrict access to kernel logs via dmesg (prevent info leakage)
-    - { name: "kernel.dmesg_restrict", value: "1" }
-    
-    # Hide kernel pointer addresses (prevent kernel exploitation)
-    - { name: "kernel.kptr_restrict", value: "2" }
+  loop: "{{ kernel_security_params }}"
+  vars:
+    kernel_security_params:
+      # Enable IP forwarding - required for Docker to function properly
+      - { name: "net.ipv4.ip_forward", value: "1" }
+      
+      # Disable sending ICMP redirects (prevent routing-based attacks)
+      # Note: Don't disable on Red Hat as it can interfere with Docker networking
+      - { name: "net.ipv4.conf.all.send_redirects", value: "0", os_filter: "not_redhat" }
+      - { name: "net.ipv4.conf.default.send_redirects", value: "0", os_filter: "not_redhat" }
+      
+      # Disable accepting ICMP redirects (prevent malicious routing table changes)
+      # Less restrictive on Red Hat for Docker compatibility
+      - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+      - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+      
+      # Disable accepting "secure" ICMP redirects (even from gateways in route table)
+      # Skip on Red Hat to avoid Docker networking issues
+      - { name: "net.ipv4.conf.all.secure_redirects", value: "0", os_filter: "not_redhat" }
+      - { name: "net.ipv4.conf.default.secure_redirects", value: "0", os_filter: "not_redhat" }
+      
+      # Ignore broadcast ICMP echo requests (prevent Smurf DDoS attacks)
+      - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+      
+      # Ignore bogus ICMP error responses (reduce log spam from malformed packets)
+      - { name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
+      
+      # Log packets with impossible source addresses ("martian" packets)
+      # Less restrictive on Red Hat for Docker
+      - { name: "net.ipv4.conf.all.log_martians", value: "{{ '0' if ansible_os_family == 'RedHat' else '1' }}" }
+      - { name: "net.ipv4.conf.default.log_martians", value: "{{ '0' if ansible_os_family == 'RedHat' else '1' }}" }
+      
+      # Restrict access to kernel logs via dmesg (prevent info leakage)
+      # Less restrictive on Red Hat for Docker debugging
+      - { name: "kernel.dmesg_restrict", value: "{{ '0' if ansible_os_family == 'RedHat' else '1' }}" }
+      
+      # Hide kernel pointer addresses (prevent kernel exploitation)
+      # Less restrictive on Red Hat for compatibility
+      - { name: "kernel.kptr_restrict", value: "{{ '1' if ansible_os_family == 'RedHat' else '2' }}" }
+  when: 
+    - item.os_filter is not defined or 
+      (item.os_filter == "not_redhat" and ansible_os_family != "RedHat") or
+      (item.os_filter == "redhat" and ansible_os_family == "RedHat")
   tags: [security, kernel]

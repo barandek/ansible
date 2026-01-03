@@ -1,8 +1,8 @@
 ---
 - name: VPS Server Setup and Hardening (Multi-Host)
   hosts: all
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
   vars_files:
     - group_vars/vault.yml
   serial: 1 # Deploy one host at a time
@@ -37,11 +37,14 @@
       tags: [docker]
     - role: firewall_setup
       tags: [firewall]
-      when: server_role in ['coolify'] # Only install Docker on web/app servers
+      when: server_role in ['coolify']
+    - role: openvpn
+      tags: [openvpn]
+      #when: openvpn_enabled | default(false)
     - role: coolify
       tags: [coolify]
-      when: server_role in ['coolify'] # Only install Coolify when role is coolify
-
+      when: server_role in ['coolify']
+      
   post_tasks:
     - name: Run post-installation tests
       include_tasks: tasks/post_install_tests.yml

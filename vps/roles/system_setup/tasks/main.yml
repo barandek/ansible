@@ -5,6 +5,12 @@
     cache_valid_time: 3600
   when: ansible_os_family == "Debian"
 
+- name: Update package cache (RedHat/CentOS/RHEL)
+  dnf:
+    update_cache: yes
+    update_only: yes
+  when: ansible_os_family == "RedHat"
+
 - name: Install essential packages
   include_tasks: "{{ ansible_os_family | lower }}.yml"
 
