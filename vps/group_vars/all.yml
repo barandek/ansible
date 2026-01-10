@@ -19,21 +19,11 @@ ssh_client_alive_count_max: 2
 # server_role should be set per-host in vault/inventory
 server_role: "coolify"
 
-# Domain and DNS configuration
-public_domain: "example.com"
-acme_email: "this@example.com"
-
-# OVH DNS Provider Configuration
-ovh_endpoint: "ovh-eu"
-ovh_application_key: "{{ vault_ovh_application_key }}"
-ovh_application_secret: "{{ vault_ovh_application_secret }}"
-ovh_consumer_key: "{{ vault_ovh_consumer_key }}"
-
 # =============================================================================
 # PLATFORM-SPECIFIC CONFIGURATION
 # =============================================================================
-# Feature flag: expose platform ports publicly (default: false for security)
-expose_platform_ports: false
+# Feature flag: expose platform ports publicly (default: true for direct access)
+expose_platform_ports: true
 
 # Coolify ports (when expose_platform_ports is true)
 coolify_ports:
@@ -65,6 +55,8 @@ current_platform_config: "{{ platform_configs[server_role] | default(platform_co
 # Default ports (always allowed)
 default_firewall_ports:
   - { port: "{{ ssh_port }}", proto: 'tcp', rule: 'allow', comment: 'SSH' }
+  - { port: 80, proto: 'tcp', rule: 'allow', comment: 'HTTP' }
+  - { port: 443, proto: 'tcp', rule: 'allow', comment: 'HTTPS' }
 
 # Custom ports (define additional ports as needed)
 custom_firewall_ports: []

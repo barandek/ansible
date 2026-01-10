@@ -25,13 +25,6 @@ vault_hosts:
     server_role: "dokploy"
 
 # =============================================================================
-# OVH DNS CONFIGURATION (for SSL certificates)
-# =============================================================================
-vault_ovh_application_key: "your_ovh_application_key"
-vault_ovh_application_secret: "your_ovh_application_secret"
-vault_ovh_consumer_key: "your_ovh_consumer_key"
-
-# =============================================================================
 # NOTES
 # =============================================================================
 # Available server_role values:
@@ -39,5 +32,4 @@ vault_ovh_consumer_key: "your_ovh_consumer_key"
 #   - dokploy: Dokploy container management
 #
 # Firewall configuration is managed in group_vars/all.yml
-# By default, only SSH (port 22) is exposed
 # Set expose_platform_ports: true per-host to expose dashboard ports

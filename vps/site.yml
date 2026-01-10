@@ -29,7 +29,7 @@
     - role: security_hardening
       tags: [security]
     - role: docker_setup
-      tags: [docker]
+      tags: [docker, coolify]
     - role: firewall_setup
       tags: [firewall]
     - role: coolify

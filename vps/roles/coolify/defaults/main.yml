@@ -7,5 +7,3 @@ coolify_cdn_base: https://cdn.coollabs.io/coolify
 coolify_dashboard_port: 8000
 coolify_websocket_port: 6001
 coolify_terminal_port: 6002
-traefik_image: traefik:v3.6
-traefik_network: coolify

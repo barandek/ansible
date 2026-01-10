@@ -1,67 +1,43 @@
 ---
-# Start Coolify services
-# Unified approach for Docker
-
 - name: Create Coolify network
-  shell: docker network create coolify --attachable
+  command: docker network create coolify --attachable
   register: network_created
   failed_when: network_created.rc != 0 and "already exists" not in network_created.stderr
   changed_when: network_created.rc == 0
-
-- name: Build compose command
-  set_fact:
-    compose_cmd: >-
-      docker compose
-      --env-file /data/coolify/source/.env
-      -f /data/coolify/source/docker-compose.yml
-      -f /data/coolify/source/docker-compose.prod.yml
-      --project-directory /data/coolify/source
-
-- name: Validate compose configuration
-  shell: "{{ compose_cmd }} config --quiet"
-  register: compose_validation
-  failed_when: compose_validation.rc != 0
-  changed_when: false
-
-- name: Fail if compose validation failed
-  fail:
-    msg: |
-      === COMPOSE VALIDATION FAILED ===
-      {{ compose_validation.stderr | default('Unknown error') }}
-  when: compose_validation.rc != 0
+  tags: [coolify]
 
 - name: Check current Coolify state
-  shell: "{{ compose_cmd }} ps -q"
+  command: docker compose -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml ps -q
+  args:
+    chdir: /data/coolify/source
   register: coolify_running
   changed_when: false
   failed_when: false
+  tags: [coolify]
 
 - name: Determine if services need update
   set_fact:
-    coolify_needs_update: >-
-      {{
-        (coolify_compose_changed | default(false)) or
-        (coolify_running.stdout | length == 0)
-      }}
+    coolify_needs_update: "{{ (coolify_compose_changed | default(false)) or (coolify_running.stdout | length == 0) }}"
+  tags: [coolify]
 
-- name: Stop Coolify services if compose configuration changed
-  shell: |
-    {{ compose_cmd }} down
+- name: Stop Coolify services if configuration changed
+  command: docker compose -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml down
   args:
     chdir: /data/coolify/source
   when: coolify_compose_changed | default(false)
-  register: coolify_stopped
+  tags: [coolify]
 
 - name: Start Coolify services
-  shell: |
-    {{ compose_cmd }} up -d {{ '--force-recreate' if (coolify_compose_changed | default(false)) else '' }} --remove-orphans
+  command: docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --remove-orphans
   args:
     chdir: /data/coolify/source
   when: coolify_needs_update
   register: coolify_started
+  tags: [coolify]
 
 - name: Wait for Coolify to start
   pause:
     seconds: 10
     prompt: "Waiting for Coolify services to start up..."
   when: coolify_started.changed | default(false)
+  tags: [coolify]

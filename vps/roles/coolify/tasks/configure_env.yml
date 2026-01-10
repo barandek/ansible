@@ -108,7 +108,7 @@
     path: /data/coolify/source/docker-compose.custom.yml
   register: existing_custom_compose
 
-- name: Remove docker-compose.custom.yml (not needed - Traefik routes internally)
+- name: Remove docker-compose.custom.yml
   file:
     path: /data/coolify/source/docker-compose.custom.yml
     state: absent
@@ -117,7 +117,7 @@
 
 - name: Set compose changed fact
   set_fact:
-    coolify_compose_changed: "{{ custom_compose_removed.changed | default(false) }}"
+    coolify_compose_changed: "{{ custom_compose_removed.changed | default(false) or env_file_updated.changed | default(false) }}"
 
 - name: Load existing credentials from .env if valid
   shell: |
