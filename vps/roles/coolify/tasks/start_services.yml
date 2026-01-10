@@ -15,7 +15,6 @@
       --env-file /data/coolify/source/.env
       -f /data/coolify/source/docker-compose.yml
       -f /data/coolify/source/docker-compose.prod.yml
-      {{ '' if (expose_platform_ports | default(false)) else '-f /data/coolify/source/docker-compose.custom.yml' }}
       --project-directory /data/coolify/source
 
 - name: Validate compose configuration
@@ -44,6 +43,14 @@
         (coolify_compose_changed | default(false)) or
         (coolify_running.stdout | length == 0)
       }}
+
+- name: Stop Coolify services if compose configuration changed
+  shell: |
+    {{ compose_cmd }} down
+  args:
+    chdir: /data/coolify/source
+  when: coolify_compose_changed | default(false)
+  register: coolify_stopped
 
 - name: Start Coolify services
   shell: |

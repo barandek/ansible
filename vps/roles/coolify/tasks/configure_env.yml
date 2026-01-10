@@ -103,57 +103,41 @@
     mode: "0700"
     force: no
 
-- name: Check if docker-compose.custom.yml exists and get checksum
+- name: Check if docker-compose.custom.yml exists
   stat:
     path: /data/coolify/source/docker-compose.custom.yml
-    checksum_algorithm: sha256
   register: existing_custom_compose
 
-- name: Generate docker-compose.custom.yml content in memory
-  set_fact:
-    expected_custom_compose_content: |
-      # Docker Compose override file to disable external port exposure
-      services:
-        coolify:
-          ports: !reset []
-        soketi:
-          ports: !reset []
-  when: not (expose_platform_ports | default(false))
-
-- name: Calculate expected content checksum
-  set_fact:
-    expected_checksum: "{{ expected_custom_compose_content | hash('sha256') }}"
-  when: not (expose_platform_ports | default(false))
-
-- name: Determine if custom compose file needs update
-  set_fact:
-    custom_compose_needs_update: >-
-      {{
-        not (expose_platform_ports | default(false)) and (
-          not existing_custom_compose.stat.exists or
-          existing_custom_compose.stat.checksum != expected_checksum
-        )
-      }}
-
-- name: Create docker-compose.custom.yml to disable external ports
-  copy:
-    content: "{{ expected_custom_compose_content }}"
-    dest: /data/coolify/source/docker-compose.custom.yml
-    mode: "0600"
-    backup: yes
-  when: custom_compose_needs_update | default(false)
-  register: custom_compose_created
-
-- name: Remove docker-compose.custom.yml when external ports are enabled
+- name: Remove docker-compose.custom.yml (not needed - Traefik routes internally)
   file:
     path: /data/coolify/source/docker-compose.custom.yml
     state: absent
-  when: expose_platform_ports | default(false)
+  when: existing_custom_compose.stat.exists
   register: custom_compose_removed
 
 - name: Set compose changed fact
   set_fact:
-    coolify_compose_changed: "{{ custom_compose_created.changed | default(false) or custom_compose_removed.changed | default(false) }}"
+    coolify_compose_changed: "{{ custom_compose_removed.changed | default(false) }}"
+
+- name: Load existing credentials from .env if valid
+  shell: |
+    if [ -f /data/coolify/source/.env ]; then
+      echo "APP_ID=$(grep '^APP_ID=' /data/coolify/source/.env | cut -d'=' -f2)"
+      echo "APP_KEY=$(grep '^APP_KEY=' /data/coolify/source/.env | cut -d'=' -f2)"
+      echo "DB_PASSWORD=$(grep '^DB_PASSWORD=' /data/coolify/source/.env | cut -d'=' -f2)"
+      echo "REDIS_PASSWORD=$(grep '^REDIS_PASSWORD=' /data/coolify/source/.env | cut -d'=' -f2)"
+      echo "PUSHER_APP_ID=$(grep '^PUSHER_APP_ID=' /data/coolify/source/.env | cut -d'=' -f2)"
+      echo "PUSHER_APP_KEY=$(grep '^PUSHER_APP_KEY=' /data/coolify/source/.env | cut -d'=' -f2)"
+      echo "PUSHER_APP_SECRET=$(grep '^PUSHER_APP_SECRET=' /data/coolify/source/.env | cut -d'=' -f2)"
+    fi
+  register: existing_env_vars
+  when: env_status.stdout == "valid"
+  changed_when: false
+
+- name: Parse existing credentials
+  set_fact:
+    coolify_credentials: "{{ dict(existing_env_vars.stdout_lines | map('split', '=') | list) }}"
+  when: env_status.stdout == "valid" and existing_env_vars.stdout_lines | length > 0
 
 - name: Generate Coolify .env file
   template:
@@ -161,7 +145,7 @@
     dest: /data/coolify/source/.env
     mode: "0600"
     backup: yes
-  when: env_status.stdout != "valid"
+  register: env_file_updated
 
 - name: Generate Coolify .env backup (local)
   template:
@@ -170,4 +154,3 @@
     mode: "0600"
   delegate_to: localhost
   become: no
-  when: env_status.stdout != "valid"

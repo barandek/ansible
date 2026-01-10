@@ -29,16 +29,29 @@
   when: ansible_os_family in ["Debian"]
   ignore_errors: yes
 
+- name: Verify firewalld is actually running
+  command: firewall-cmd --state
+  register: firewalld_active_check
+  changed_when: false
+  when: ansible_os_family in ["RedHat"]
+  ignore_errors: yes
+
 - name: Check Fail2ban status
   command: fail2ban-client status sshd
   register: fail2ban_status
   changed_when: false
   ignore_errors: yes
 
-- name: Set UFW firewall status (Debian/Ubuntu)
+- name: Set firewall status
   set_fact:
-    firewall_status: "Service: {{ 'Active' if (ufw_active_check is defined and ufw_active_check.rc == 0) else 'Inactive' }}"
-  when: ansible_os_family in ["Debian"]
+    firewall_status: |-
+      {% if ansible_os_family in ["Debian"] %}
+      UFW: {{ 'Active' if (ufw_active_check is defined and ufw_active_check.rc == 0) else 'Inactive' }}
+      {% elif ansible_os_family in ["RedHat"] %}
+      Firewalld: {{ 'Active' if (firewalld_active_check is defined and firewalld_active_check.rc == 0 and 'running' in firewalld_active_check.stdout) else 'Inactive' }}
+      {% else %}
+      Unknown
+      {% endif %}
 
 - name: Display test results
   debug:
@@ -47,6 +60,6 @@
       Docker: {{ docker_version.stdout }}
       Docker Compose: {{ docker_compose_version_output if docker_compose_available else 'Not available' }}
       Security:
-        Fail2ban SSH jail: {{ 'Active' if fail2ban_status.rc == 0 else 'Not active' }}
-        Firewall Status: {{ firewall_status }}
+        Fail2ban SSH jail: {{ 'Active' if (fail2ban_status is defined and fail2ban_status.rc == 0) else 'Not active' }}
+        Firewall: {{ firewall_status }}
       Status: {{ 'All tests passed successfully!' if docker_compose_available else 'Docker Compose installation needs attention' }}

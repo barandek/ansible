@@ -45,7 +45,6 @@ http:
     coolify-https:
       entryPoints:
         - https
-        - private
       service: coolify
       rule: Host(`{{ public_domain }}`) || Host(`coolify.{{ public_domain }}`)
       tls:
@@ -54,7 +53,6 @@ http:
     coolify-realtime-wss:
       entryPoints:
         - https
-        - private
       service: coolify-realtime
       rule: (Host(`{{ public_domain }}`) || Host(`realtime.{{ public_domain }}`) || Host(`coolify.{{ public_domain }}`)) && PathPrefix(`/app`)
       tls:
@@ -63,7 +61,6 @@ http:
     coolify-terminal-wss:
       entryPoints:
         - https
-        - private
       service: coolify-terminal
       rule: (Host(`{{ public_domain }}`) || Host(`coolify.{{ public_domain }}`)) && PathPrefix(`/terminal/ws`)
       tls:

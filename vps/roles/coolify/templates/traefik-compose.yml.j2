@@ -61,11 +61,19 @@ services:
       - '--accesslog.filepath=/var/log/traefik/access.log'
       
       # OVH DNS Challenge (for wildcard certs) - NO public ports needed
+      - '--certificatesresolvers.ovh.acme.dnschallenge=true'
+      - '--certificatesresolvers.ovh.acme.dnschallenge.provider=ovh'
+      - '--certificatesresolvers.ovh.acme.dnschallenge.delaybeforecheck=30'
+      - '--certificatesresolvers.ovh.acme.storage=/traefik/acme.json'
+      - '--certificatesresolvers.ovh.acme.email={{ acme_email | default("this@example.com") }}'
+      - '--entrypoints.https.http.tls.certresolver=ovh'
+      
+      # Letsencrypt alias (for Coolify's dynamic catchall routers)
       - '--certificatesresolvers.letsencrypt.acme.dnschallenge=true'
       - '--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=ovh'
+      - '--certificatesresolvers.letsencrypt.acme.dnschallenge.delaybeforecheck=30'
       - '--certificatesresolvers.letsencrypt.acme.storage=/traefik/acme.json'
       - '--certificatesresolvers.letsencrypt.acme.email={{ acme_email | default("this@example.com") }}'
-      - '--entrypoints.https.http.tls.certresolver=letsencrypt'
       
     labels:
       - traefik.enable=true
