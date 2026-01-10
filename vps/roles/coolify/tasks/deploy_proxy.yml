@@ -1,0 +1,88 @@
+---
+- name: Create Traefik network
+  command: docker network create {{ traefik_network | default('coolify') }}
+  register: network_create
+  failed_when: network_create.rc != 0 and "already exists" not in network_create.stderr
+  changed_when: network_create.rc == 0
+  tags: [coolify, proxy]
+
+- name: Create Traefik log directory
+  file:
+    path: /var/log/traefik
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [coolify, proxy]
+
+- name: Ensure acme.json exists with correct permissions
+  file:
+    path: /data/coolify/proxy/acme.json
+    state: touch
+    owner: root
+    group: root
+    mode: '0600'
+  tags: [coolify, proxy]
+
+- name: Deploy Traefik proxy configuration
+  template:
+    src: traefik-compose.yml.j2
+    dest: /data/coolify/proxy/docker-compose.yml
+    owner: root
+    group: root
+    mode: '0644'
+  register: traefik_compose_updated
+  tags: [coolify, proxy]
+
+- name: Create Traefik dynamic configuration directory
+  file:
+    path: /data/coolify/proxy/dynamic
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [coolify, proxy]
+
+- name: Deploy Traefik dynamic configuration
+  template:
+    src: traefik-dynamic.yml.j2
+    dest: /data/coolify/proxy/dynamic/coolify.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  register: traefik_dynamic_config_deployed
+  tags: [coolify, proxy]
+
+- name: Stop existing Traefik proxy if configuration updated
+  shell:
+    cmd: |
+      cd /data/coolify/proxy
+      docker compose down
+  when: traefik_compose_updated.changed
+  ignore_errors: yes
+  tags: [coolify, proxy]
+
+- name: Start Traefik proxy service
+  shell:
+    cmd: |
+      cd /data/coolify/proxy
+      docker compose up -d {{ '--force-recreate' if traefik_compose_updated.changed else '' }}
+  register: traefik_started
+  tags: [coolify, proxy]
+
+- name: Wait for Traefik to be healthy
+  shell:
+    cmd: |
+      timeout 60 bash -c 'until docker inspect --format="{% raw %}{{.State.Health.Status}}{% endraw %}" coolify-proxy | grep -q "healthy"; do sleep 2; done'
+  register: traefik_health
+  when: traefik_started.changed
+  tags: [coolify, proxy]
+
+- name: Display Traefik proxy information
+  debug:
+    msg: |
+      === TRAEFIK PROXY DEPLOYED ===
+      URL: https://{{ public_domain | default('example.com') }}
+      Dashboard: https://traefik.{{ public_domain | default('example.com') }}
+      SSL: Let's Encrypt via DNS-01 (OVH)
+  tags: [coolify, proxy]

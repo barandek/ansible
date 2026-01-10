@@ -4,7 +4,7 @@
   args:
     creates: /etc/yum.repos.d/docker-ce.repo
 
-- name: Install Docker Engine
+- name: Install Docker packages
   dnf:
     name:
       - docker-ce
@@ -13,16 +13,3 @@
       - docker-buildx-plugin
       - docker-compose-plugin
     state: present
-
-- name: Start and enable Docker
-  systemd:
-    name: docker
-    state: started
-    enabled: yes
-
-- name: Add user to docker group
-  user:
-    name: "{{ ansible_user }}"
-    groups: docker
-    append: yes
-  when: ansible_user != "root"

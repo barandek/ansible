@@ -1,22 +1,11 @@
 ---
-# Default variables for Coolify role
+# Coolify role defaults
+# Note: Ports and expose_platform_ports are defined in group_vars/all.yml
 
-# Coolify installation directory
 coolify_base_dir: /data/coolify
-
-# Coolify ports
+coolify_cdn_base: https://cdn.coollabs.io/coolify
 coolify_dashboard_port: 8000
 coolify_websocket_port: 6001
 coolify_terminal_port: 6002
-
-# Expose Coolify ports externally (set to true to expose, false to hide behind proxy)
-expose_coolify_ports: true
-
-# Coolify CDN URLs
-coolify_cdn_base: https://cdn.coollabs.io/coolify
-coolify_docker_compose_url: "{{ coolify_cdn_base }}/docker-compose.yml"
-coolify_docker_compose_prod_url: "{{ coolify_cdn_base }}/docker-compose.prod.yml"
-coolify_upgrade_url: "{{ coolify_cdn_base }}/upgrade.sh"
-
-# Coolify credentials are generated using openssl commands
-# to match the official installation specification
+traefik_image: traefik:v3.6
+traefik_network: coolify

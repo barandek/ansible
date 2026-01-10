@@ -26,6 +26,7 @@
 
 - name: Generate new Coolify credentials
   shell: |
+    set -e
     APP_ID=$(openssl rand -hex 16)
     APP_KEY="base64:$(openssl rand -base64 32)"
     DB_PASSWORD=$(openssl rand -base64 32)
@@ -49,11 +50,33 @@
   become: no
   run_once: true
   when: env_status.stdout != "valid"
+  check_mode: no  # Always run credentials generation, even in check mode
+
+- name: Debug credentials generation output
+  debug:
+    msg: |
+      === CREDENTIALS GENERATION DEBUG ===
+      Exit code: {{ coolify_credentials_raw.rc }}
+      Stdout: {{ coolify_credentials_raw.stdout }}
+      Stderr: {{ coolify_credentials_raw.stderr }}
+  when: env_status.stdout != "valid" and coolify_credentials_raw is defined
 
 - name: Set credentials fact from generated
   set_fact:
     coolify_credentials: "{{ coolify_credentials_raw.stdout | from_json }}"
-  when: env_status.stdout != "valid"
+  when: env_status.stdout != "valid" and coolify_credentials_raw.stdout != ""
+
+- name: Fail if credentials generation failed
+  fail:
+    msg: |
+      === CREDENTIALS GENERATION FAILED ===
+      Exit code: {{ coolify_credentials_raw.rc }}
+      Stdout: "{{ coolify_credentials_raw.stdout }}"
+      Stderr: "{{ coolify_credentials_raw.stderr }}"
+      
+      This usually means openssl is not available or failed to generate random data.
+      Please check that openssl is installed on the control host.
+  when: env_status.stdout != "valid" and not ansible_check_mode and (coolify_credentials_raw.stdout == "" or coolify_credentials_raw.rc != 0)
 
 - name: Check if compose files exist
   stat:
@@ -95,18 +118,18 @@
           ports: !reset []
         soketi:
           ports: !reset []
-  when: not (expose_coolify_ports | default(false))
+  when: not (expose_platform_ports | default(false))
 
 - name: Calculate expected content checksum
   set_fact:
     expected_checksum: "{{ expected_custom_compose_content | hash('sha256') }}"
-  when: not (expose_coolify_ports | default(false))
+  when: not (expose_platform_ports | default(false))
 
 - name: Determine if custom compose file needs update
   set_fact:
     custom_compose_needs_update: >-
       {{
-        not (expose_coolify_ports | default(false)) and (
+        not (expose_platform_ports | default(false)) and (
           not existing_custom_compose.stat.exists or
           existing_custom_compose.stat.checksum != expected_checksum
         )
@@ -125,7 +148,7 @@
   file:
     path: /data/coolify/source/docker-compose.custom.yml
     state: absent
-  when: expose_coolify_ports | default(false)
+  when: expose_platform_ports | default(false)
   register: custom_compose_removed
 
 - name: Set compose changed fact

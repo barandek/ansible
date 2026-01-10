@@ -18,6 +18,15 @@
     - /data/coolify/databases
     - /data/coolify/backups
     - /data/coolify/services
+    - /data/coolify/webhooks-during-maintenance
+
+- name: Create Coolify proxy directories with root ownership
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
     - /data/coolify/proxy
     - /data/coolify/proxy/dynamic
-    - /data/coolify/webhooks-during-maintenance

@@ -1,7 +1,0 @@
----
-- name: Deploy server config
-  template:
-    src: server.conf.j2
-    dest: "{{ openvpn_config_dir }}/server/server.conf"
-    mode: "0644"
-  notify: restart openvpn

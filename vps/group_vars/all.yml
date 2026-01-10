@@ -3,116 +3,85 @@
 # This file uses vault variables for sensitive data
 
 # =============================================================================
-# DYNAMIC HOST CONFIGURATION
-# =============================================================================
-# These are automatically set from inventory (which gets them from vault)
-# No need to redefine them here since they're already available as:
-# - inventory_hostname (the host name)
-# - ansible_user (from vault)
-# - auth_method (from vault)
-# - ansible_ssh_pass (from vault)
-# - ansible_ssh_private_key_file (from vault)
-
-# =============================================================================
-# OPENVPN CONFIGURATION
-# =============================================================================
-
-# OpenVPN split-tunnel configuration
-openvpn_enabled: "{{ vault_openvpn_enabled | default(false) }}"
-openvpn_port: 1194
-openvpn_protocol: udp
-openvpn_server_network: "10.8.0.0"
-openvpn_server_netmask: "255.255.255.0"
-openvpn_clients: ['laptop', 'phone']
-
-# =============================================================================
 # SSH CONFIGURATION
 # =============================================================================
 ssh_key_dir: "~/.ssh"
 ssh_key_name: "{{ inventory_hostname }}_{{ ansible_user }}_key"
-
-ssh_port: "{{ current_role_config.ssh_port | default(22) }}"
+ssh_port: 22
 ssh_max_auth_tries: 3
 ssh_client_alive_interval: 300
 ssh_client_alive_count_max: 2
 
 # =============================================================================
-# ROLE-BASED CONFIGURATION
+# DEPLOYMENT PLATFORM CONFIGURATION
 # =============================================================================
-# Feature flags (defined first to avoid circular references)
-expose_coolify_ports: false  # Override in inventory per-host if needed
+# Supported platforms: coolify, dokploy
+# server_role should be set per-host in vault/inventory
+server_role: "coolify"
 
-# Coolify firewall ports (conditional based on expose_coolify_ports)
-coolify_firewall_ports: >-
-  {{ [] if not expose_coolify_ports | default(false) else [
-    { 'port': 8000, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Coolify dashboard HTTP'},
-    { 'port': 6001, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Real-time communications'},
-    { 'port': 6002, 'proto': 'tcp', 'rule': 'allow', 'comment': 'Terminal access' }
-  ] }}
+# Domain and DNS configuration
+public_domain: "example.com"
+acme_email: "this@example.com"
 
-# Different configurations based on server role
-role_configs:
+# OVH DNS Provider Configuration
+ovh_endpoint: "ovh-eu"
+ovh_application_key: "{{ vault_ovh_application_key }}"
+ovh_application_secret: "{{ vault_ovh_application_secret }}"
+ovh_consumer_key: "{{ vault_ovh_consumer_key }}"
+
+# =============================================================================
+# PLATFORM-SPECIFIC CONFIGURATION
+# =============================================================================
+# Feature flag: expose platform ports publicly (default: false for security)
+expose_platform_ports: false
+
+# Coolify ports (when expose_platform_ports is true)
+coolify_ports:
+  - { port: 8000, proto: 'tcp', rule: 'allow', comment: 'Coolify dashboard' }
+  - { port: 6001, proto: 'tcp', rule: 'allow', comment: 'Coolify realtime' }
+  - { port: 6002, proto: 'tcp', rule: 'allow', comment: 'Coolify terminal' }
+
+# Dokploy ports (when expose_platform_ports is true)
+dokploy_ports:
+  - { port: 3000, proto: 'tcp', rule: 'allow', comment: 'Dokploy dashboard' }
+
+# Dokploy configuration
+dokploy_port: 3000
+dokploy_postgres_password: "{{ vault_dokploy_postgres_password | default('dokploy_secure_password') }}"
+
+# Platform configurations
+platform_configs:
   coolify:
-    min_cpu_cores: 2
-    min_memory_gb: 3
-    expose_coolify_ports: "{{ expose_coolify_ports }}"  # Reference the feature flag
-    firewall_ports: "{{ coolify_firewall_ports }}"  # Reference pre-computed ports
+    firewall_ports: "{{ coolify_ports if expose_platform_ports else [] }}"
+  dokploy:
+    firewall_ports: "{{ dokploy_ports if expose_platform_ports else [] }}"
 
-  database:
-    min_cpu_cores: 4
-    min_memory_gb: 8
-    ssh_port: 2222 # Custom SSH port for database
-    fail2ban_bantime: 7200 # Stricter security
-    firewall_ports:
-      - { port: 5432, proto: 'tcp', rule: 'allow', comment: "PostgreSQL" }
-      - { port: 6379, proto: 'tcp', rule: 'allow', comment: "Redis" }
-
-  webserver:
-    min_cpu_cores: 2
-    min_memory_gb: 4
-    firewall_ports:
-      - { port: 8080, proto: 'tcp', rule: 'allow', comment: "Web application" }
-      - { port: 3000, proto: 'tcp', rule: 'allow', comment: "Node.js application" }
-
-  minimal:
-    min_cpu_cores: 1
-    min_memory_gb: 2
-    firewall_ports: [] # Only default ports (SSH, HTTP, HTTPS)
-
-# Apply role-based configuration
-current_role_config: "{{ role_configs[server_role] | default(role_configs.minimal) }}"
+# Current platform config based on server_role
+current_platform_config: "{{ platform_configs[server_role] | default(platform_configs.coolify) }}"
 
 # =============================================================================
 # FIREWALL CONFIGURATION
 # =============================================================================
+# Default ports (always allowed)
+default_firewall_ports:
+  - { port: "{{ ssh_port }}", proto: 'tcp', rule: 'allow', comment: 'SSH' }
 
-# Default recommended ports (always allowed)
-default_allow_ports:
-  - { port: "{{ ssh_port }}", proto: 'tcp', rule: 'allow', comment: "SSH access" }
-  - { port: 80, proto: 'tcp', rule: 'allow', comment: "HTTP traffic" }
-  - { port: 443, proto: 'tcp', rule: 'allow', comment: "HTTPS traffic" }
+# Custom ports (define additional ports as needed)
+custom_firewall_ports: []
 
-# Role-specific ports (merged with defaults)
-# Includes all role-specific firewall ports (database, webserver, coolify, etc.)
-role_specific_ports: "{{ current_role_config.firewall_ports | default([]) }}"
-
-# Custom ports (can be defined in vault or inventory)
-custom_firewall_ports: "{{ vault_custom_firewall_ports | default([]) }}"
-
-# Build final firewall rules (single source of truth)
-# Combines: defaults + role-specific (from role_configs) + custom
-# Only includes rules that should be PRESENT (allowed)
-firewall_rules: "{{ default_allow_ports + role_specific_ports + custom_firewall_ports }}"
+# Final firewall rules (single source of truth)
+# Combines: default + platform-specific + custom
+firewall_rules: "{{ default_firewall_ports + current_platform_config.firewall_ports + custom_firewall_ports }}"
 
 # =============================================================================
 # SECURITY CONFIGURATION
 # =============================================================================
-fail2ban_bantime: "{{ current_role_config.fail2ban_bantime | default(3600) }}"
+fail2ban_bantime: 3600
 fail2ban_findtime: 600
 fail2ban_maxretry: 3
 
 # =============================================================================
-# SYSTEM REQUIREMENTS (without quotes to preserve integer type)
+# SYSTEM REQUIREMENTS
 # =============================================================================
-min_cpu_cores: "{{ current_role_config.min_cpu_cores | default(2) }}"
-min_memory_gb: "{{ current_role_config.min_memory_gb | default(2) }}"
+min_cpu_cores: 2
+min_memory_gb: 3

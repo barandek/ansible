@@ -13,9 +13,9 @@ services:
     networks:
       - coolify
     ports:
-      - '80:80'
-      - '443:443'
-      - '443:443/udp'
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
     healthcheck:
       test: 'wget -qO- http://localhost:80/ping || exit 1'
       interval: 4s
@@ -24,8 +24,9 @@ services:
     volumes:
       - '/var/run/docker.sock:/var/run/docker.sock:ro'
       - '/data/coolify/proxy/:/traefik'
+      - '/var/log/traefik:/var/log/traefik'
     environment:
-      - OVH_ENDPOINT={{ ovh_endpoint | default('ovh-eu') }}
+      - OVH_ENDPOINT={{ ovh_endpoint | default("ovh-eu") }}
       - OVH_APPLICATION_KEY={{ ovh_application_key }}
       - OVH_APPLICATION_SECRET={{ ovh_application_secret }}
       - OVH_CONSUMER_KEY={{ ovh_consumer_key }}
@@ -36,9 +37,9 @@ services:
       - '--api.insecure=false'
       - '--log.level=INFO'
       
-      # Public entrypoints (bind to public interface)
-      - '--entrypoints.http.address={{ ansible_default_ipv4.address }}:80'
-      - '--entrypoints.https.address={{ ansible_default_ipv4.address }}:443'
+      # Public entrypoints
+      - '--entrypoints.http.address=:80'
+      - '--entrypoints.https.address=:443'
       - '--entrypoints.http.http.encodequerysemicolons=true'
       - '--entryPoints.http.http2.maxConcurrentStreams=250'
       - '--entrypoints.https.http.encodequerysemicolons=true'
@@ -50,40 +51,29 @@ services:
       - '--entrypoints.http.http.redirections.entrypoint.scheme=https'
       - '--entrypoints.http.http.redirections.entrypoint.permanent=true'
       
-      # Private entrypoint (VPN only - bind to VPN interface)
-      - '--entrypoints.private.address={{ hostvars[inventory_hostname].openvpn_network | default("10.8.0.0") | regex_replace("\.0$", ".1") }}:443'
-      
       # Providers
       - '--providers.file.directory=/traefik/dynamic/'
       - '--providers.file.watch=true'
       - '--providers.docker=true'
       - '--providers.docker.exposedbydefault=false'
       - '--providers.docker.network=coolify'
-      - '--providers.docker.defaultRule=Host(`{{ index .Labels "com.docker.compose.service" }}.{{ index .Labels "traefik.domain" | default "nycz.cloud" }}`)'
+      - '--accesslog=true'
+      - '--accesslog.filepath=/var/log/traefik/access.log'
       
-      # OVH DNS Challenge (for wildcard certs)
-      - '--certificatesresolvers.ovh.acme.dnschallenge=true'
-      - '--certificatesresolvers.ovh.acme.dnschallenge.provider=ovh'
-      - '--certificatesresolvers.ovh.acme.dnschallenge.delaybeforecheck=10'
-      - '--certificatesresolvers.ovh.acme.storage=/traefik/acme-ovh.json'
-      - '--certificatesresolvers.ovh.acme.email={{ acme_email | default('admin@nycz.cloud') }}'
-      - '--certificatesresolvers.ovh.acme.caserver=https://acme-v02.api.letsencrypt.org/directory'
-      
-      # Wildcard certificate domains
-      - '--entrypoints.https.http.tls.certresolver=ovh'
-      - '--entrypoints.https.http.tls.domains[0].main={{ public_domain | default('nycz.cloud') }}'
-      - '--entrypoints.https.http.tls.domains[0].sans=*.{{ public_domain | default('nycz.cloud') }}'
-      - '--entrypoints.private.http.tls.certresolver=ovh'
-      - '--entrypoints.private.http.tls.domains[0].main={{ public_domain | default('nycz.cloud') }}'
-      - '--entrypoints.private.http.tls.domains[0].sans=*.{{ public_domain | default('nycz.cloud') }}'
+      # OVH DNS Challenge (for wildcard certs) - NO public ports needed
+      - '--certificatesresolvers.letsencrypt.acme.dnschallenge=true'
+      - '--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=ovh'
+      - '--certificatesresolvers.letsencrypt.acme.storage=/traefik/acme.json'
+      - '--certificatesresolvers.letsencrypt.acme.email={{ acme_email | default("this@example.com") }}'
+      - '--entrypoints.https.http.tls.certresolver=letsencrypt'
       
     labels:
       - traefik.enable=true
-      - traefik.domain={{ public_domain | default('nycz.cloud') }}
-      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.rule=Host(`traefik.{{ public_domain | default('example.com') }}`)
       - traefik.http.routers.traefik.entrypoints=https
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.tls=true
       - traefik.http.routers.traefik.tls.certresolver=ovh
-      - traefik.http.routers.traefik.middlewares=security-headers
       - traefik.http.services.traefik.loadbalancer.server.port=8080
       - coolify.managed=true
       - coolify.proxy=true

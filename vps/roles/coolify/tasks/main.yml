@@ -20,6 +20,10 @@
   include_tasks: configure_env.yml
   tags: [coolify]
 
+- name: Deploy Traefik proxy
+  include_tasks: deploy_proxy.yml
+  tags: [coolify]
+
 - name: Start Coolify services
   include_tasks: start_services.yml
   tags: [coolify]

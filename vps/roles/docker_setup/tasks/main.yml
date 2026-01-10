@@ -1,20 +1,26 @@
 
 ---
-- name: Install Docker (Rocky Linux)
-  include_tasks: rocky.yml
+- name: Install Docker (RedHat)
+  include_tasks: redhat.yml
   when: ansible_os_family == "RedHat"
 
-- name: Install Docker (Debian/Ubuntu)
-  include_tasks: docker_debian.yml
+- name: Install Docker (Debian)
+  include_tasks: debian.yml
   when: ansible_os_family == "Debian"
 
-- name: Install Docker Python module
-  pip:
+- name: Start and enable Docker
+  systemd:
     name: docker
-    state: present
+    state: started
+    enabled: yes
 
-- name: Verify Docker installation
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+  when: ansible_user != "root"
+
+- name: Verify Docker
   command: docker --version
-  register: docker_version_check
-  failed_when: docker_version_check.rc != 0
   changed_when: false

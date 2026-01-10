@@ -1,84 +1,81 @@
 ---
-- name: Debug firewall configuration
-  debug:
-    msg: |
-      === FIREWALL CONFIGURATION DEBUG ===
-      Server Role: {{ server_role }}
-      Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
-      Total firewall rules: {{ firewall_rules | length }}
-      
-      Rules:
-      {% for rule in firewall_rules %}
-      - {{ rule.port }}/{{ rule.proto }}: {{ rule.comment }}
-      {% endfor %}
-    verbosity: 1
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
 
-- name: Check current UFW status
-  command: ufw status verbose
-  register: current_ufw_status
-  changed_when: false
-  failed_when: false
+- name: Set default policies
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
 
-- name: Check if UFW is enabled
-  set_fact:
-    ufw_is_enabled: "{{ 'Status: active' in current_ufw_status.stdout }}"
-
-- name: Reset UFW to clean state (only if already enabled)
-  shell: |
-    ufw --force reset
-    ufw default deny incoming
-    ufw default allow outgoing
-  register: ufw_reset
-  changed_when: true
-  when: ufw_is_enabled
-
-- name: Add firewall rules from configuration (BEFORE enabling UFW)
+- name: Add firewall rules
   ufw:
     rule: "{{ item.rule }}"
     port: "{{ item.port }}"
     proto: "{{ item.proto }}"
-    src: "{{ item.src | default(omit) }}"
     comment: "{{ item.comment }}"
   loop: "{{ firewall_rules }}"
-  ignore_errors: yes
-  register: firewall_rules_result
 
-- name: Enable UFW (after rules are added)
+- name: Get Docker bridge subnet CIDR
+  shell: docker network inspect bridge --format '{{ "{{" }}range .IPAM.Config{{ "}}" }}{{ "{{" }}.Subnet{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
+  register: docker_bridge_subnet
+  changed_when: false
+  ignore_errors: yes
+
+- name: Get Coolify network subnet CIDR
+  shell: docker network inspect coolify --format '{{ "{{" }}range .IPAM.Config{{ "}}" }}{{ "{{" }}.Subnet{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
+  register: coolify_network_subnet
+  changed_when: false
+  ignore_errors: yes
+
+- name: Allow all traffic on loopback interface
+  ufw:
+    rule: allow
+    interface: lo
+    direction: in
+
+- name: Allow Docker internal traffic (Debian/Ubuntu)
+  ufw:
+    rule: allow
+    src: "{{ item }}"
+  loop:
+    - "{{ docker_bridge_subnet.stdout }}"
+    - "{{ coolify_network_subnet.stdout }}"
+  ignore_errors: yes
+  when: ansible_os_family == "Debian" and (docker_bridge_subnet.rc == 0 or coolify_network_subnet.rc == 0)
+
+- name: Allow Docker bridge interface traffic (Debian/Ubuntu)
+  ufw:
+    rule: allow
+    interface: docker0
+    direction: in
+  ignore_errors: yes
+  when: ansible_os_family == "Debian"
+
+- name: Allow Docker internal traffic (RedHat)
+  firewalld:
+    zone: docker
+    interface: docker0
+    state: enabled
+    permanent: yes
+    immediate: yes
+  ignore_errors: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Enable UFW
   ufw:
     state: enabled
 
-- name: Ensure UFW service is enabled and active
-  systemd:
-    name: ufw
-    enabled: yes
-    state: started
-  when: ansible_service_mgr == "systemd"
-
-- name: Reload UFW to apply all rules
-  command: ufw reload
-  become: yes
-
-- name: Verify UFW is active
-  command: ufw status
-  register: ufw_verify_status
-  changed_when: false
-  failed_when: "'Status: active' not in ufw_verify_status.stdout"
-
 - name: Display UFW status
   command: ufw status numbered
-  register: ufw_status_output
+  register: ufw_status
   changed_when: false
 
-- name: Show UFW configuration summary
+- name: Show firewall status
   debug:
-    msg: |
-      === UFW FIREWALL CONFIGURATION ===
-      {% for line in ufw_status_output.stdout_lines %}
-      {{ line }}
-      {% endfor %}
-
-      Configuration Summary:
-      - Total rules configured: {{ firewall_rules | length }}
-      - Server role: {{ server_role }}
-      - Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
-      - UFW reset and rebuilt from configuration (single source of truth)
+    msg: "{{ ufw_status.stdout_lines }}"
+    verbosity: 0

@@ -15,7 +15,7 @@
       --env-file /data/coolify/source/.env
       -f /data/coolify/source/docker-compose.yml
       -f /data/coolify/source/docker-compose.prod.yml
-      {{ '' if (expose_coolify_ports | default(false)) else '-f /data/coolify/source/docker-compose.custom.yml' }}
+      {{ '' if (expose_platform_ports | default(false)) else '-f /data/coolify/source/docker-compose.custom.yml' }}
       --project-directory /data/coolify/source
 
 - name: Validate compose configuration

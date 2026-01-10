@@ -1,18 +1,4 @@
 ---
-- name: Debug firewall configuration
-  debug:
-    msg: |
-      === FIREWALL CONFIGURATION DEBUG ===
-      Server Role: {{ server_role }}
-      Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
-      Total firewall rules: {{ firewall_rules | length }}
-      
-      Rules:
-      {% for rule in firewall_rules %}
-      - {{ rule.port }}/{{ rule.proto }}: {{ rule.comment }}
-      {% endfor %}
-    verbosity: 1
-
 - name: Update libnftables packages to fix compatibility issues
   dnf:
     name:
@@ -25,21 +11,17 @@
     name: firewalld
     state: present
 
-- name: Ensure firewalld service is started and enabled
+- name: Start and enable firewalld
   systemd:
     name: firewalld
     enabled: yes
     state: started
 
-- name: Ensure SSH service is always allowed (prevent lockout)
-  firewalld:
-    zone: public
-    service: ssh
-    permanent: yes
-    state: enabled
-    immediate: yes
+- name: Set default zone to public
+  command: firewall-cmd --set-default-zone=public
+  changed_when: false
 
-- name: Add firewall rules from configuration
+- name: Add firewall rules
   firewalld:
     zone: public
     port: "{{ item.port }}/{{ item.proto }}"
@@ -48,23 +30,24 @@
     immediate: yes
   loop: "{{ firewall_rules }}"
 
-- name: Reload firewalld to apply all rules
+- name: Allow Docker internal traffic (RedHat)
+  firewalld:
+    zone: trusted
+    interface: docker0
+    state: enabled
+    permanent: yes
+    immediate: yes
+  ignore_errors: yes
+
+- name: Reload firewalld
   command: firewall-cmd --reload
 
 - name: Display firewalld status
   command: firewall-cmd --list-all --zone=public
-  register: firewalld_status_output
+  register: firewalld_status
   changed_when: false
 
-- name: Show firewalld configuration summary
+- name: Show firewall status
   debug:
-    msg: |
-      === FIREWALLD FIREWALL CONFIGURATION ===
-      {% for line in firewalld_status_output.stdout_lines %}
-      {{ line }}
-      {% endfor %}
-
-      Configuration Summary:
-      - Total rules configured: {{ firewall_rules | length }}
-      - Server role: {{ server_role }}
-      - Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
+    msg: "{{ firewalld_status.stdout_lines }}"
+    verbosity: 0
