@@ -2,19 +2,19 @@
 - name: Install Docker (RedHat)
   include_tasks: redhat.yml
   when: ansible_os_family == "RedHat"
-  tags: [docker, coolify]
+  tags: [docker]
 
 - name: Install Docker (Debian)
   include_tasks: debian.yml
   when: ansible_os_family == "Debian"
-  tags: [docker, coolify]
+  tags: [docker]
 
 - name: Start and enable Docker
   systemd:
     name: docker
     state: started
     enabled: yes
-  tags: [docker, coolify]
+  tags: [docker]
 
 - name: Add user to docker group
   user:
@@ -22,14 +22,14 @@
     groups: docker
     append: yes
   when: ansible_user != "root"
-  tags: [docker, coolify]
+  tags: [docker]
 
 - name: Verify Docker installation
   command: docker --version
   changed_when: false
-  tags: [docker, coolify]
+  tags: [docker]
 
 - name: Verify Docker Compose installation
   command: docker compose version
   changed_when: false
-  tags: [docker, coolify]
+  tags: [docker]

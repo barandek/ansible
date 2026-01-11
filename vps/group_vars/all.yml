@@ -17,7 +17,7 @@ ssh_client_alive_count_max: 2
 # =============================================================================
 # Supported platforms: coolify, dokploy
 # server_role should be set per-host in vault/inventory
-server_role: "coolify"
+# server_role: "coolify"  # <-- Removed, now set per-host in vault
 
 # =============================================================================
 # PLATFORM-SPECIFIC CONFIGURATION
@@ -30,14 +30,17 @@ coolify_ports:
   - { port: 8000, proto: 'tcp', rule: 'allow', comment: 'Coolify dashboard' }
   - { port: 6001, proto: 'tcp', rule: 'allow', comment: 'Coolify realtime' }
   - { port: 6002, proto: 'tcp', rule: 'allow', comment: 'Coolify terminal' }
+  - { port: 80, proto: 'tcp', rule: 'allow', comment: 'HTTP' }
+  - { port: 443, proto: 'tcp', rule: 'allow', comment: 'HTTPS' }
 
 # Dokploy ports (when expose_platform_ports is true)
 dokploy_ports:
   - { port: 3000, proto: 'tcp', rule: 'allow', comment: 'Dokploy dashboard' }
+  - { port: 80, proto: 'tcp', rule: 'allow', comment: 'HTTP' }
+  - { port: 443, proto: 'tcp', rule: 'allow', comment: 'HTTPS' }
 
 # Dokploy configuration
 dokploy_port: 3000
-dokploy_postgres_password: "{{ vault_dokploy_postgres_password | default('dokploy_secure_password') }}"
 
 # Platform configurations
 platform_configs:
@@ -55,8 +58,6 @@ current_platform_config: "{{ platform_configs[server_role] | default(platform_co
 # Default ports (always allowed)
 default_firewall_ports:
   - { port: "{{ ssh_port }}", proto: 'tcp', rule: 'allow', comment: 'SSH' }
-  - { port: 80, proto: 'tcp', rule: 'allow', comment: 'HTTP' }
-  - { port: 443, proto: 'tcp', rule: 'allow', comment: 'HTTPS' }
 
 # Custom ports (define additional ports as needed)
 custom_firewall_ports: []

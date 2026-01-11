@@ -16,7 +16,7 @@ vault_hosts:
     server_role: "coolify"
     # expose_platform_ports: true  # Uncomment to expose dashboard publicly
 
-  # Dokploy Server Example
+  # Dokploy Server Example (IP mode - access via http://IP:3000)
   dokploy-server:
     ansible_host: "203.0.113.20"
     ansible_user: "root"
@@ -24,12 +24,33 @@ vault_hosts:
     auth_method: "ssh_key"
     server_role: "dokploy"
 
+  # Dokploy Server Example (Domain mode - access via https://dokploy.example.com)
+  # dokploy-with-domain:
+  #   ansible_host: "203.0.113.30"
+  #   ansible_user: "root"
+  #   ansible_ssh_private_key_file: "/home/user/.ssh/dokploy_key"
+  #   auth_method: "ssh_key"
+  #   server_role: "dokploy"
+  #   dokploy_domain: "dokploy.example.com"
+  #   dokploy_acme_email: "admin@example.com"
+
+# =============================================================================
+# DOKPLOY SECRETS
+# =============================================================================
+# PostgreSQL password for Dokploy (REQUIRED)
+dokploy_postgres_password: "change_me_to_secure_random_password"
+
 # =============================================================================
 # NOTES
 # =============================================================================
 # Available server_role values:
 #   - coolify: Coolify deployment platform
 #   - dokploy: Dokploy container management
+#
+# Dokploy modes:
+#   - IP mode (default): Access via http://SERVER_IP:3000
+#   - Domain mode: Set dokploy_domain and dokploy_acme_email per-host
+#     to access via https://your-domain.com with Let's Encrypt SSL
 #
 # Firewall configuration is managed in group_vars/all.yml
 # Set expose_platform_ports: true per-host to expose dashboard ports
