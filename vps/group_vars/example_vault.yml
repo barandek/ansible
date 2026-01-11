@@ -1,79 +1,56 @@
-
 ---
-# Multi-Host VPS Vault Configuration
-# This file contains sensitive information for multiple servers and is encrypted with ansible-vault
+# VPS Vault Configuration
+# This file contains sensitive information and should be encrypted with ansible-vault
+# Copy this file to vault.yml and fill in your actual values
 
 # =============================================================================
 # HOST DEFINITIONS
 # =============================================================================
 vault_hosts:
-  # VPS Server
-  vps-server:
+  # Coolify Server Example
+  coolify-server:
     ansible_host: "203.0.113.10"
     ansible_user: "root"
-    ansible_ssh_private_key_file: "/home/test/.ssh/vps_server_key"
+    ansible_ssh_private_key_file: "/home/user/.ssh/coolify_key"
     auth_method: "ssh_key"
     server_role: "coolify"
-    environment_name: "production"
-    # ansible_become_pass: "SudoPassword123"  # Only needed if ansible_user is not root
+    # expose_platform_ports: true  # Uncomment to expose dashboard publicly
 
-    # Optional: Override expose_coolify_ports per-host
-    # expose_coolify_ports: true  # Expose Coolify dashboard to public internet
-    
-  # Web Server 01
-  webserver01:
-    ansible_host: "123.45.67.89"
-    ansible_user: "deploy"
-    ansible_become_pass: "SecurePassword123"  # Used for both SSH and sudo
-    auth_method: "password"
-    server_role: "webserver"
-    environment_name: "production"
-    
-  # Database Primary
-  db-primary:
-    ansible_host: "198.51.100.25"
-    ansible_user: "db_ops"
-    ansible_password: "SuperSecretDBPassword!23"
-    auth_method: "password"
-    server_role: "database"
-    environment_name: "production"
-    vault_openvpn_enabled: false
-
-  # Application Server
-  app-server:
-    ansible_host: "203.0.113.50"
+  # Dokploy Server Example (IP mode - access via http://IP:3000)
+  dokploy-server:
+    ansible_host: "203.0.113.20"
     ansible_user: "root"
-    ansible_ssh_private_key_file: "/home/test/.ssh/app_server_key"
+    ansible_ssh_private_key_file: "/home/user/.ssh/dokploy_key"
     auth_method: "ssh_key"
-    server_role: "application"
-    environment_name: "staging"
+    server_role: "dokploy"
+
+  # Dokploy Server Example (Domain mode - access via https://dokploy.example.com)
+  # dokploy-with-domain:
+  #   ansible_host: "203.0.113.30"
+  #   ansible_user: "root"
+  #   ansible_ssh_private_key_file: "/home/user/.ssh/dokploy_key"
+  #   auth_method: "ssh_key"
+  #   server_role: "dokploy"
+  #   dokploy_domain: "dokploy.example.com"
+  #   dokploy_acme_email: "admin@example.com"
 
 # =============================================================================
-# OPENVPN CONFIGURATION
+# DOKPLOY SECRETS
 # =============================================================================
-vault_openvpn_enabled: true
+# PostgreSQL password for Dokploy (REQUIRED)
+dokploy_postgres_password: "change_me_to_secure_random_password"
 
 # =============================================================================
-# COOLIFY CONFIGURATION
+# NOTES
 # =============================================================================
-expose_coolify_ports: false
-
-# =============================================================================
-# CUSTOM FIREWALL CONFIGURATION (OPTIONAL)
-# =============================================================================
-vault_custom_firewall_ports:
-  - { port: 9000, proto: tcp, rule: allow, comment: "Custom monitoring port" }
-  - { port: 8443, proto: tcp, rule: allow, comment: "Custom HTTPS admin panel" }
-  - { port: 1234, proto: udp, rule: allow, comment: "Custom UDP service" }
-
-# =============================================================================
-# ROLE-BASED CONFIGURATION
-# =============================================================================
-# Each server role has specific firewall ports and requirements
-# Defined in group_vars/all.yml and can be overridden per-host
+# Available server_role values:
+#   - coolify: Coolify deployment platform
+#   - dokploy: Dokploy container management
 #
-# Available roles:
-#   - coolify: Coolify deployment platform (min 2 CPU, 3GB RAM)
-#   - database: Database server (min 4 CPU, 8GB RAM, custom SSH port 2222)
-#   - webserver: Web application server (min 2 CPU, 4GB RAM)
-#   - minimal: Minimal server (min 1 CPU, 2GB RAM)
+# Dokploy modes:
+#   - IP mode (default): Access via http://SERVER_IP:3000
+#   - Domain mode: Set dokploy_domain and dokploy_acme_email per-host
+#     to access via https://your-domain.com with Let's Encrypt SSL
+#
+# Firewall configuration is managed in group_vars/all.yml
+# Set expose_platform_ports: true per-host to expose dashboard ports

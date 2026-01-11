@@ -18,6 +18,4 @@
     - /data/coolify/databases
     - /data/coolify/backups
     - /data/coolify/services
-    - /data/coolify/proxy
-    - /data/coolify/proxy/dynamic
     - /data/coolify/webhooks-during-maintenance

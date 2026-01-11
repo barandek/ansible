@@ -1,18 +1,4 @@
 ---
-- name: Debug firewall configuration
-  debug:
-    msg: |
-      === FIREWALL CONFIGURATION DEBUG ===
-      Server Role: {{ server_role }}
-      Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
-      Total firewall rules: {{ firewall_rules | length }}
-      
-      Rules:
-      {% for rule in firewall_rules %}
-      - {{ rule.port }}/{{ rule.proto }}: {{ rule.comment }}
-      {% endfor %}
-    verbosity: 1
-
 - name: Update libnftables packages to fix compatibility issues
   dnf:
     name:
@@ -25,19 +11,51 @@
     name: firewalld
     state: present
 
-- name: Ensure firewalld service is started and enabled
+- name: Start and enable firewalld
   systemd:
     name: firewalld
     enabled: yes
     state: started
 
-- name: Ensure SSH service is always allowed (prevent lockout)
-  firewalld:
-    zone: public
-    service: ssh
-    permanent: yes
-    state: enabled
-    immediate: yes
+- name: Debug firewall configuration
+  debug:
+    msg: |
+      === FIREWALL CONFIGURATION DEBUG ===
+      Server Role: {{ server_role }}
+      Expose Platform Ports: {{ expose_platform_ports | default(false) }}
+      Total firewall rules: {{ firewall_rules | length }}
+      
+      Rules:
+      {% for rule in firewall_rules %}
+      - {{ rule.port }}/{{ rule.proto }}: {{ rule.comment }}
+      {% endfor %}
+    verbosity: 1
+
+- name: Check if firewalld is running
+  command: firewall-cmd --state
+  register: firewalld_state
+  changed_when: false
+  failed_when: false
+
+- name: Check if firewalld is active
+  set_fact:
+    firewalld_is_active: "{{ firewalld_state.rc == 0 and 'running' in firewalld_state.stdout }}"
+
+- name: Reset firewalld to clean state (only if already running)
+  shell: |
+    firewall-cmd --complete-reload
+    firewall-cmd --permanent --zone=public --remove-port=all
+    firewall-cmd --permanent --zone=public --remove-service=all
+    firewall-cmd --set-default-zone=public
+    firewall-cmd --reload
+  register: firewalld_reset
+  changed_when: true
+  when: firewalld_is_active
+  ignore_errors: yes
+
+- name: Set default zone to public
+  command: firewall-cmd --set-default-zone=public
+  changed_when: false
 
 - name: Add firewall rules from configuration
   firewalld:
@@ -51,6 +69,12 @@
 - name: Reload firewalld to apply all rules
   command: firewall-cmd --reload
 
+- name: Verify firewalld is running
+  command: firewall-cmd --state
+  register: firewalld_verify_state
+  changed_when: false
+  failed_when: "'running' not in firewalld_verify_state.stdout"
+
 - name: Display firewalld status
   command: firewall-cmd --list-all --zone=public
   register: firewalld_status_output
@@ -59,7 +83,7 @@
 - name: Show firewalld configuration summary
   debug:
     msg: |
-      === FIREWALLD FIREWALL CONFIGURATION ===
+      === FIREWALLD CONFIGURATION ===
       {% for line in firewalld_status_output.stdout_lines %}
       {{ line }}
       {% endfor %}
@@ -67,4 +91,5 @@
       Configuration Summary:
       - Total rules configured: {{ firewall_rules | length }}
       - Server role: {{ server_role }}
-      - Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
+      - Expose Platform Ports: {{ expose_platform_ports | default(false) }}
+      - Firewalld reset and rebuilt from configuration

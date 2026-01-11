@@ -1,10 +1,15 @@
 ---
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+
 - name: Debug firewall configuration
   debug:
     msg: |
       === FIREWALL CONFIGURATION DEBUG ===
       Server Role: {{ server_role }}
-      Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
+      Expose Platform Ports: {{ expose_platform_ports | default(false) }}
       Total firewall rules: {{ firewall_rules | length }}
       
       Rules:
@@ -32,18 +37,30 @@
   changed_when: true
   when: ufw_is_enabled
 
-- name: Add firewall rules from configuration (BEFORE enabling UFW)
+- name: Set default policies (if UFW was not previously enabled)
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+  when: not ufw_is_enabled
+
+- name: Allow all traffic on loopback interface
+  ufw:
+    rule: allow
+    interface: lo
+    direction: in
+
+- name: Add firewall rules from configuration
   ufw:
     rule: "{{ item.rule }}"
     port: "{{ item.port }}"
     proto: "{{ item.proto }}"
-    src: "{{ item.src | default(omit) }}"
     comment: "{{ item.comment }}"
   loop: "{{ firewall_rules }}"
-  ignore_errors: yes
-  register: firewall_rules_result
 
-- name: Enable UFW (after rules are added)
+- name: Enable UFW
   ufw:
     state: enabled
 
@@ -56,7 +73,6 @@
 
 - name: Reload UFW to apply all rules
   command: ufw reload
-  become: yes
 
 - name: Verify UFW is active
   command: ufw status
@@ -80,5 +96,5 @@
       Configuration Summary:
       - Total rules configured: {{ firewall_rules | length }}
       - Server role: {{ server_role }}
-      - Expose Coolify Ports: {{ expose_coolify_ports | default(false) }}
-      - UFW reset and rebuilt from configuration (single source of truth)
+      - Expose Platform Ports: {{ expose_platform_ports | default(false) }}
+      - UFW reset and rebuilt from configuration

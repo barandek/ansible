@@ -10,7 +10,20 @@
     msg: |
       === COOLIFY INSTALLATION COMPLETE ===
 
-      Dashboard: http://{{ ansible_host }}:8000
+      Server IP: {{ ansible_host }}
+      
+      Access URLs:
+      - Dashboard: http://{{ ansible_host }}:8000
+      - WebSocket: http://{{ ansible_host }}:6001
+      - Terminal: http://{{ ansible_host }}:6002
+      
+      Exposed Ports:
+      - 8000 (Dashboard)
+      - 6001 (WebSocket/Realtime)
+      - 6002 (Terminal)
+      - 80 (HTTP)
+      - 443 (HTTPS)
+      - 22 (SSH)
 
       Running containers:
       {% for container in coolify_containers.stdout_lines %}

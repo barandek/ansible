@@ -1,30 +1,25 @@
 ---
-- name: VPS Server Setup and Hardening (Multi-Host)
+- name: VPS Server Setup and Hardening
   hosts: all
   become: true
   gather_facts: true
   vars_files:
     - group_vars/vault.yml
-  serial: 1 # Deploy one host at a time
+  serial: 1
 
   pre_tasks:
-    - name: Display current host information
+    - name: Display host information
       debug:
         msg: |
-          === CONFIGURING HOST: {{ inventory_hostname }} ===
+          Host: {{ inventory_hostname }}
           Role: {{ server_role }}
-          Environment: {{ environment_name }}
-          OS Family: {{ ansible_os_family }}
-          Authentication: {{ auth_method }}
-          Target IP: {{ ansible_host }}
-          Firewall Rules: {{ firewall_allow_ports | length }} allow rules, {{ firewall_deny_ports | length }} deny rules
-          Role-Specific Ports: {{ role_specific_ports | length }} additional ports
-          Custom Ports: {{ custom_firewall_ports | length }} custom ports
+          OS: {{ ansible_os_family }}
+          Firewall Rules: {{ firewall_rules | length }}
 
     - name: Check system requirements
       include_tasks: tasks/system_check.yml
       tags: [always]
-      when: skip_system_check | default(false) == false
+      when: not (skip_system_check | default(false))
 
   roles:
     - role: system_setup
@@ -37,14 +32,13 @@
       tags: [docker]
     - role: firewall_setup
       tags: [firewall]
-      when: server_role in ['coolify']
-    - role: openvpn
-      tags: [openvpn]
-      #when: openvpn_enabled | default(false)
     - role: coolify
       tags: [coolify]
-      when: server_role in ['coolify']
-      
+      when: server_role == 'coolify'
+    - role: dokploy
+      tags: [dokploy]
+      when: server_role == 'dokploy'
+
   post_tasks:
     - name: Run post-installation tests
       include_tasks: tasks/post_install_tests.yml
